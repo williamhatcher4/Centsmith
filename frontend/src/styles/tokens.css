@@ -1,0 +1,104 @@
+/* Design tokens — read by Tailwind via @theme inline and by raw CSS. */
+
+:root {
+  /* Surfaces */
+  --bg-base: #F6F7FB;
+  --bg-gradient: linear-gradient(135deg, #EEF2FF 0%, #F0F9FF 50%, #FDF4FF 100%);
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-strong: rgba(255, 255, 255, 0.88);
+  --surface-solid: #FFFFFF;
+  --surface-muted: #F8FAFC;
+
+  --border: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.14);
+  --border-solid: #E2E8F0;
+
+  /* Text */
+  --text: #0B1220;
+  --text-muted: #475569;
+  --text-subtle: #64748B;
+  --text-faint: #94A3B8;
+  --text-inverse: #FFFFFF;
+
+  /* Brand */
+  --accent: #4F46E5;
+  --accent-hover: #4338CA;
+  --accent-soft: #EEF2FF;
+  --accent-ring: rgba(79, 70, 229, 0.35);
+
+  /* Status */
+  --success: #059669;
+  --success-soft: #D1FAE5;
+  --danger: #DC2626;
+  --danger-soft: #FEE2E2;
+  --warning: #D97706;
+  --warning-soft: #FEF3C7;
+
+  /* Charts */
+  --chart-1: #4F46E5; /* indigo */
+  --chart-2: #06B6D4; /* cyan */
+  --chart-3: #10B981; /* emerald */
+  --chart-4: #F59E0B; /* amber */
+  --chart-5: #EC4899; /* pink */
+  --chart-6: #8B5CF6; /* violet */
+  --chart-grid: rgba(15, 23, 42, 0.06);
+
+  /* Effects */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 6px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 24px 48px -12px rgba(15, 23, 42, 0.18);
+  --blur-glass: saturate(180%) blur(20px);
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg-base: #0A0E1A;
+  --bg-gradient: linear-gradient(135deg, #0F172A 0%, #0B1027 50%, #1A0F2E 100%);
+  --surface: rgba(20, 27, 45, 0.62);
+  --surface-strong: rgba(20, 27, 45, 0.82);
+  --surface-solid: #131A2E;
+  --surface-muted: #1A2138;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-solid: #1F2945;
+
+  --text: #E6EAF2;
+  --text-muted: #A1A8BD;
+  --text-subtle: #7B8198;
+  --text-faint: #5C6479;
+  --text-inverse: #0B1220;
+
+  --accent: #818CF8;
+  --accent-hover: #A5B4FC;
+  --accent-soft: rgba(129, 140, 248, 0.14);
+  --accent-ring: rgba(129, 140, 248, 0.45);
+
+  --success: #34D399;
+  --success-soft: rgba(52, 211, 153, 0.14);
+  --danger: #F87171;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --warning: #FBBF24;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+
+  --chart-1: #818CF8;
+  --chart-2: #22D3EE;
+  --chart-3: #34D399;
+  --chart-4: #FBBF24;
+  --chart-5: #F472B6;
+  --chart-6: #A78BFA;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
