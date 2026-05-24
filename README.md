@@ -7,11 +7,58 @@ The app runs entirely on your own computer. Your data never leaves your machine.
 ## What you'll need
 
 - **Windows 10 or 11**
-- **Python 3.10 or newer** — download from <https://www.python.org/downloads/>
-  - During installation, tick the **"Add Python to PATH"** checkbox at the bottom of the first screen.
-- **Node.js LTS** — download from <https://nodejs.org>
-  - The default install options are fine.
 - **A web browser** (Edge, Chrome, or Firefox — anything modern)
+- **Python** and **Node.js** — full walkthroughs below
+
+### Installing Python
+
+Python runs the part of the app that handles your data.
+
+1. Open <https://www.python.org/downloads/> in your browser.
+2. You'll see a big yellow button near the top that says **"Download Python 3.x.x"** (the exact version number doesn't matter as long as it's 3.10 or higher). Click it.
+3. The installer file (something like `python-3.13.1-amd64.exe`) downloads to your `Downloads` folder. Double-click it to run it.
+4. **Important — read this before clicking anything in the installer.** The first screen has two checkboxes near the bottom:
+   - ☐ Use admin privileges when installing py.exe
+   - ☐ **Add python.exe to PATH** ← **TICK THIS ONE**
+
+   The "Add python.exe to PATH" checkbox is critical. If you miss it, the app won't be able to find Python and you'll have to uninstall and reinstall. **Tick it before clicking anything else.**
+5. Click **Install Now** (the top option). Approve the Windows User Account Control prompt if it appears.
+6. Wait for the installer to finish (usually under a minute), then click **Close**.
+7. **Verify it worked.** Press the Windows key, type `PowerShell`, and open it. In the window that opens, type:
+
+   ```powershell
+   python --version
+   ```
+
+   Press Enter. You should see something like `Python 3.13.1`. If you see that, Python is installed correctly.
+
+   If instead you see `'python' is not recognized as an internal or external command`, the "Add to PATH" box wasn't ticked. Uninstall Python from **Settings → Apps**, then run the installer again and tick the box this time.
+
+### Installing Node.js
+
+Node.js runs the part of the app you see in your browser.
+
+1. Open <https://nodejs.org> in your browser.
+2. The page shows two big download buttons. Click the one labeled **LTS** (it says something like "Recommended For Most Users"). **Do not click the "Current" button** — that's a newer, less stable version.
+3. The installer (`node-v22.x.x-x64.msi` or similar) downloads to your `Downloads` folder. Double-click it.
+4. Click **Next** through the installer. The default settings are correct — don't change anything. The screens are:
+   - Welcome → **Next**
+   - License Agreement → tick "I accept" → **Next**
+   - Destination Folder → **Next** (leave as `C:\Program Files\nodejs\`)
+   - Custom Setup → **Next** (don't deselect anything)
+   - "Tools for Native Modules" → **Next** (leave the box unticked; you don't need this for Credit Tracker)
+   - Ready to Install → **Install**
+5. Approve the Windows User Account Control prompt. Wait for the installer to finish, then click **Finish**.
+6. **Verify it worked.** Close any existing PowerShell windows, then open a **new** PowerShell window (Windows key → type `PowerShell` → Enter). In the new window, type:
+
+   ```powershell
+   node --version
+   npm --version
+   ```
+
+   Press Enter after each line. You should see version numbers like `v22.11.0` and `10.9.0`. If you see those, Node.js is installed correctly.
+
+   You must use a **new** PowerShell window after installing — windows opened before the install won't see the new programs.
 
 ## Getting the code
 
