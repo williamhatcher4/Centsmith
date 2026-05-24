@@ -99,7 +99,7 @@ async def preview_import(
         raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
     raw = await file.read()
     try:
-        rows, fmt = parse_statement(file.filename or "statement.csv", raw)
+        rows, fmt, skipped_errors = parse_statement(file.filename or "statement.csv", raw)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -128,6 +128,7 @@ async def preview_import(
         ignored_credits=ignored_credits,
         to_import=len(preview_rows) - duplicates,
         statement_format=fmt,
+        skipped_errors=skipped_errors,
     )
 
 
@@ -141,7 +142,7 @@ async def confirm_import(
         raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
     raw = await file.read()
     try:
-        rows, fmt = parse_statement(file.filename or "statement.csv", raw)
+        rows, fmt, skipped_errors = parse_statement(file.filename or "statement.csv", raw)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -170,7 +171,7 @@ async def confirm_import(
         existing.add(row.source_hash)
         imported += 1
     db.commit()
-    return ImportResult(imported=imported, skipped=skipped, ignored_credits=ignored_credits)
+    return ImportResult(imported=imported, skipped=skipped, ignored_credits=ignored_credits, skipped_errors=skipped_errors)
 
 
 @router.post("/import/checking/preview", response_model=ImportPreview)
@@ -183,7 +184,7 @@ async def preview_checking_import(
         raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
     raw = await file.read()
     try:
-        rows, fmt = parse_statement(file.filename or "checking.csv", raw, source="checking")
+        rows, fmt, skipped_errors = parse_statement(file.filename or "checking.csv", raw, source="checking")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -210,6 +211,7 @@ async def preview_checking_import(
         ignored_credits=0,
         to_import=len(preview_rows) - duplicates,
         statement_format=fmt,
+        skipped_errors=skipped_errors,
     )
 
 
@@ -223,7 +225,7 @@ async def confirm_checking_import(
         raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
     raw = await file.read()
     try:
-        rows, fmt = parse_statement(file.filename or "checking.csv", raw, source="checking")
+        rows, fmt, skipped_errors = parse_statement(file.filename or "checking.csv", raw, source="checking")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -250,7 +252,7 @@ async def confirm_checking_import(
         existing.add(row.source_hash)
         imported += 1
     db.commit()
-    return ImportResult(imported=imported, skipped=skipped, ignored_credits=0)
+    return ImportResult(imported=imported, skipped=skipped, ignored_credits=0, skipped_errors=skipped_errors)
 
 
 @router.post("/bulk-classify", response_model=BulkClassifyResult)

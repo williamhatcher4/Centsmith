@@ -38,12 +38,14 @@ export interface ImportPreview {
   ignored_credits: number
   to_import: number
   statement_format: string
+  skipped_errors: number
 }
 
 export interface ImportResult {
   imported: number
   skipped: number
   ignored_credits: number
+  skipped_errors: number
 }
 
 export interface SpendingSummary {

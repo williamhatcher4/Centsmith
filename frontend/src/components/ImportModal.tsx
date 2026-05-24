@@ -18,7 +18,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
-  const [result, setResult] = useState<{ imported: number; skipped: number; ignored_credits: number } | null>(null)
+  const [result, setResult] = useState<{ imported: number; skipped: number; ignored_credits: number; skipped_errors: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
@@ -33,9 +33,10 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
   const uploadCopy = isChecking
     ? 'Drop a checking-account statement. Every row (deposits and withdrawals) becomes a Personal transaction in your inbox.'
     : 'Drop a credit card statement. This app supports the headerless account activity CSV and American Express XLS formats you provided.'
+  const errorsCopy = result && result.skipped_errors > 0 ? ` ${result.skipped_errors} row${result.skipped_errors === 1 ? '' : 's'} could not be parsed and were skipped.` : ''
   const doneCopy = isChecking
-    ? `${result?.skipped ?? 0} duplicates skipped. New transactions are waiting in the Personal Inbox.`
-    : `${result?.skipped ?? 0} duplicates skipped. ${result?.ignored_credits ?? 0} credit transactions ignored. New spending is waiting in the Inbox.`
+    ? `${result?.skipped ?? 0} duplicates skipped.${errorsCopy} New transactions are waiting in the Personal Inbox.`
+    : `${result?.skipped ?? 0} duplicates skipped. ${result?.ignored_credits ?? 0} credit transactions ignored.${errorsCopy} New spending is waiting in the Inbox.`
 
   async function readFile(nextFile: File) {
     setFile(nextFile)
@@ -102,6 +103,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
             <div><div className="text-[11px] uppercase text-[var(--text-faint)]">Duplicates</div><div className="font-semibold text-[var(--text-subtle)]">{preview.duplicates}</div></div>
             {!isChecking && <div><div className="text-[11px] uppercase text-[var(--text-faint)]">Credits ignored</div><div className="font-semibold text-[var(--text-subtle)]">{preview.ignored_credits}</div></div>}
             <div><div className="text-[11px] uppercase text-[var(--text-faint)]">Rows</div><div className="font-semibold">{preview.total}</div></div>
+            {preview.skipped_errors > 0 && <div><div className="text-[11px] uppercase text-[var(--text-faint)]">Skipped</div><div className="font-semibold text-[var(--danger)]">{preview.skipped_errors}</div></div>}
           </div>
           <div className="max-h-[420px] overflow-auto rounded-[8px] border border-[var(--border)]">
             <table className="w-full text-sm"><thead className="sticky top-0 bg-[var(--surface-solid)]"><tr className="border-b border-[var(--border)] text-left text-[11px] uppercase text-[var(--text-subtle)]"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Description</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2">Status</th></tr></thead><tbody>

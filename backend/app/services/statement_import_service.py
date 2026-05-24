@@ -97,6 +97,14 @@ def _looks_like_date(value: str) -> bool:
         return False
 
 
+def _is_blank(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, (int, float)):
+        return False
+    return not str(value).strip()
+
+
 def _col(row: dict, *names: str) -> Optional[str]:
     lower = {str(k).lower().strip(): v for k, v in row.items()}
     for name in names:
@@ -106,28 +114,32 @@ def _col(row: dict, *names: str) -> Optional[str]:
     return None
 
 
-def _parse_csv(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str]:
+def _parse_csv(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
     text = raw.decode("utf-8-sig", errors="replace")
     first = next(csv.reader(io.StringIO(text)), [])
     rows: list[ParsedRow] = []
+    errors = 0
 
     if first and _looks_like_date(first[0]):
         reader = csv.reader(io.StringIO(text))
         for i, cells in enumerate(reader, start=1):
             if len(cells) < 3 or not _looks_like_date(cells[0]):
                 continue
-            debit = _parse_amount(cells[2]) if len(cells) > 2 and cells[2].strip() else Decimal("0")
-            credit = _parse_amount(cells[3]) if len(cells) > 3 and cells[3].strip() else Decimal("0")
-            signed = credit if credit else -abs(debit)
-            parsed = _row(_parse_date(cells[0]), cells[1] if len(cells) > 1 else "", signed, i, source)
-            if parsed:
-                rows.append(parsed)
+            try:
+                debit = _parse_amount(cells[2]) if len(cells) > 2 and cells[2].strip() else Decimal("0")
+                credit = _parse_amount(cells[3]) if len(cells) > 3 and cells[3].strip() else Decimal("0")
+                signed = credit if credit else -abs(debit)
+                parsed = _row(_parse_date(cells[0]), cells[1] if len(cells) > 1 else "", signed, i, source)
+                if parsed:
+                    rows.append(parsed)
+            except Exception:
+                errors += 1
         fmt = FORMAT_NAMES["checking"] if source == "checking" else FORMAT_NAMES["accountactivity"]
-        return rows, fmt
+        return rows, fmt, errors
 
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames:
-        return [], "Unknown"
+        return [], "Unknown", 0
     for i, record in enumerate(reader, start=2):
         raw_date = _col(record, "Date", "Transaction Date", "Trans Date", "Posted Date")
         desc = _col(record, "Description", "Merchant", "Payee", "Details", "Narrative") or ""
@@ -136,22 +148,25 @@ def _parse_csv(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str]:
         amount = _col(record, "Amount", "Transaction Amount", "Value")
         if not raw_date:
             continue
-        if debit or credit:
-            d = _parse_amount(debit) if debit else Decimal("0")
-            c = _parse_amount(credit) if credit else Decimal("0")
-            signed = c if c else -abs(d)
-        elif amount:
-            signed = _parse_amount(amount)
-        else:
-            continue
-        parsed = _row(_parse_date(raw_date), desc, signed, i, source)
-        if parsed:
-            rows.append(parsed)
+        try:
+            if debit or credit:
+                d = _parse_amount(debit) if debit else Decimal("0")
+                c = _parse_amount(credit) if credit else Decimal("0")
+                signed = c if c else -abs(d)
+            elif amount:
+                signed = _parse_amount(amount)
+            else:
+                continue
+            parsed = _row(_parse_date(raw_date), desc, signed, i, source)
+            if parsed:
+                rows.append(parsed)
+        except Exception:
+            errors += 1
     fmt = FORMAT_NAMES["checking"] if source == "checking" else FORMAT_NAMES["generic"]
-    return rows, fmt
+    return rows, fmt, errors
 
 
-def _parse_xls(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str]:
+def _parse_xls(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
     try:
         import xlrd
     except ImportError as exc:
@@ -187,8 +202,11 @@ def _parse_xls(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str]:
         raise ValueError("XLS format must include date, description, and amount columns")
 
     rows: list[ParsedRow] = []
+    errors = 0
     for row_number, cells in enumerate(data[header_index + 1 :], start=header_index + 2):
         if date_col >= len(cells) or desc_col >= len(cells) or amount_col >= len(cells):
+            continue
+        if _is_blank(cells[date_col]) and _is_blank(cells[desc_col]) and _is_blank(cells[amount_col]):
             continue
         try:
             raw_date = cells[date_col]
@@ -207,12 +225,12 @@ def _parse_xls(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str]:
             if parsed:
                 rows.append(parsed)
         except Exception:
-            continue
+            errors += 1
     fmt = FORMAT_NAMES["checking"] if source == "checking" else FORMAT_NAMES["amex_xls"]
-    return rows, fmt
+    return rows, fmt, errors
 
 
-def parse_statement(filename: str, content: bytes, source: str = "card") -> tuple[list[ParsedRow], str]:
+def parse_statement(filename: str, content: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
     suffix = filename.lower().rsplit(".", 1)[-1]
     if suffix == "xls":
         return _parse_xls(content, source)

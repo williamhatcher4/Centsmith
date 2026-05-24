@@ -101,12 +101,14 @@ class ImportPreview(BaseModel):
     ignored_credits: int
     to_import: int
     statement_format: str
+    skipped_errors: int = 0
 
 
 class ImportResult(BaseModel):
     imported: int
     skipped: int
     ignored_credits: int
+    skipped_errors: int = 0
 
 
 class SpendingPoint(BaseModel):
