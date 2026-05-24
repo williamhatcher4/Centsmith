@@ -31,6 +31,7 @@ def _parse_date(raw: object) -> date:
     if isinstance(raw, date):
         return raw
     s = str(raw).strip()
+    s = re.sub(r"([A-Za-z]+)\.", r"\1", s)
     for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%d/%m/%y", "%b %d, %Y", "%d-%b-%Y", "%d %b %Y", "%d %B %Y"):
         try:
             return datetime.strptime(s, fmt).date()
