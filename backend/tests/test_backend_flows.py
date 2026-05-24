@@ -149,7 +149,7 @@ def test_import_preview_and_confirm_ignore_credits(client, db_session):
         ["2026-05-02", "Refund", "", "4.25"],
     ]))
     assert confirm.status_code == 200
-    assert confirm.json() == {"imported": 1, "skipped": 0, "ignored_credits": 1}
+    assert confirm.json() == {"imported": 1, "skipped": 0, "ignored_credits": 1, "skipped_errors": 0}
 
     stored = db_session.query(Transaction).all()
     assert len(stored) == 1
@@ -170,7 +170,55 @@ def test_duplicate_import_reports_skipped_debits_separately_from_credits(client)
     ]))
 
     assert duplicate.status_code == 200
-    assert duplicate.json() == {"imported": 0, "skipped": 1, "ignored_credits": 1}
+    assert duplicate.json() == {"imported": 0, "skipped": 1, "ignored_credits": 1, "skipped_errors": 0}
+
+
+def test_legitimately_duplicate_rows_in_one_file_are_both_imported(client, db_session):
+    login(client)
+    files = statement_file([
+        ["2026-05-01", "Coffee", "4.25", ""],
+        ["2026-05-01", "Coffee", "4.25", ""],
+    ])
+    response = client.post("/api/v1/transactions/import/confirm", files=files)
+    assert response.status_code == 200
+    assert response.json() == {"imported": 2, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
+
+    stored = db_session.query(Transaction).filter(Transaction.description == "Coffee").all()
+    assert len(stored) == 2
+    assert stored[0].source_hash != stored[1].source_hash
+
+
+def test_overlap_import_with_legitimate_duplicate_imports_only_new_occurrence(client, db_session):
+    login(client)
+    first = client.post("/api/v1/transactions/import/confirm", files=statement_file([
+        ["2026-05-01", "Coffee", "4.25", ""],
+    ]))
+    assert first.json()["imported"] == 1
+
+    second = client.post("/api/v1/transactions/import/confirm", files=statement_file([
+        ["2026-05-01", "Coffee", "4.25", ""],
+        ["2026-05-01", "Coffee", "4.25", ""],
+    ]))
+    assert second.status_code == 200
+    assert second.json() == {"imported": 1, "skipped": 1, "ignored_credits": 0, "skipped_errors": 0}
+    assert db_session.query(Transaction).filter(Transaction.description == "Coffee").count() == 2
+
+
+def test_preview_marks_only_overlapping_occurrence_as_duplicate(client):
+    login(client)
+    client.post("/api/v1/transactions/import/confirm", files=statement_file([
+        ["2026-05-01", "Coffee", "4.25", ""],
+    ]))
+    preview = client.post("/api/v1/transactions/import/preview", files=statement_file([
+        ["2026-05-01", "Coffee", "4.25", ""],
+        ["2026-05-01", "Coffee", "4.25", ""],
+    ]))
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["total"] == 2
+    assert body["duplicates"] == 1
+    assert body["to_import"] == 1
+    assert [row["is_duplicate"] for row in body["rows"]] == [True, False]
 
 
 def test_exports_include_only_debit_rows(client, db_session):

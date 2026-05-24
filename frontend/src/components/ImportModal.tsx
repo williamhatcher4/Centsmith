@@ -1,14 +1,32 @@
-﻿import { useRef, useState } from 'react'
+﻿import { useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, Upload } from 'lucide-react'
 import { transactionsApi } from '../api/transactions'
-import type { ImportPreview } from '../types'
+import type { ImportPreview, ImportPreviewRow } from '../types'
 import { formatMoney } from '../utils/money'
 import { cn } from '../utils/cn'
 import { Badge, Button, Modal } from './ui'
 
 function signedMoney(cents: number, type: 'credit' | 'debit') {
   return `${type === 'credit' ? '+' : '-'}${formatMoney(cents)}`
+}
+
+function repeatGroupInfo(rows: ImportPreviewRow[]): Map<number, { index: number; size: number }> {
+  const groups = new Map<string, number[]>()
+  for (const row of rows) {
+    const key = `${row.date}|${row.description.trim().toLowerCase()}|${row.amount_cents}|${row.transaction_type}`
+    const bucket = groups.get(key) ?? []
+    bucket.push(row.row_number)
+    groups.set(key, bucket)
+  }
+  const result = new Map<number, { index: number; size: number }>()
+  for (const bucket of groups.values()) {
+    if (bucket.length < 2) continue
+    bucket.forEach((rowNumber, idx) => {
+      result.set(rowNumber, { index: idx + 1, size: bucket.length })
+    })
+  }
+  return result
 }
 
 type ImportMode = 'card' | 'checking'
@@ -25,6 +43,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
 
   const isChecking = mode === 'checking'
   const step = result ? 'done' : preview ? 'preview' : 'upload'
+  const repeatInfo = useMemo(() => repeatGroupInfo(preview?.rows ?? []), [preview])
   const titles = {
     upload: isChecking ? 'Import checking statement' : 'Import statement',
     preview: isChecking ? 'Checking import preview' : 'Import preview',
@@ -107,7 +126,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
           </div>
           <div className="max-h-[420px] overflow-auto rounded-[8px] border border-[var(--border)]">
             <table className="w-full text-sm"><thead className="sticky top-0 bg-[var(--surface-solid)]"><tr className="border-b border-[var(--border)] text-left text-[11px] uppercase text-[var(--text-subtle)]"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Description</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2">Status</th></tr></thead><tbody>
-              {preview.rows.map((row) => <tr key={row.row_number} className={cn('border-b border-[var(--border)] last:border-0', row.is_duplicate && 'opacity-50')}><td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-subtle)]">{row.date}</td><td className="max-w-[260px] truncate px-3 py-2 font-medium">{row.description}</td><td className={cn('whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums', row.transaction_type === 'credit' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>{signedMoney(row.amount_cents, row.transaction_type)}</td><td className="px-3 py-2">{row.is_duplicate ? <Badge tone="muted">duplicate</Badge> : <Badge tone="success">new</Badge>}</td></tr>)}
+              {preview.rows.map((row) => { const repeat = repeatInfo.get(row.row_number); return <tr key={row.row_number} className={cn('border-b border-[var(--border)] last:border-0', row.is_duplicate && 'opacity-50')}><td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-subtle)]">{row.date}</td><td className="max-w-[260px] truncate px-3 py-2 font-medium">{row.description}</td><td className={cn('whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums', row.transaction_type === 'credit' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>{signedMoney(row.amount_cents, row.transaction_type)}</td><td className="px-3 py-2"><div className="flex flex-wrap items-center gap-1.5">{row.is_duplicate ? <Badge tone="muted">duplicate</Badge> : <Badge tone="success">new</Badge>}{repeat && <Badge tone="muted">repeat in file ({repeat.index} of {repeat.size})</Badge>}</div></td></tr> })}
             </tbody></table>
           </div>
           {error && <div role="alert" className="mt-3 rounded-[8px] bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">{error}</div>}

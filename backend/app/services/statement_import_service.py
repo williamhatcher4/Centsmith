@@ -68,9 +68,28 @@ def _to_cents(amount: Decimal) -> int:
     return int((abs(amount) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def _source_hash(tx_date: date, description: str, amount_cents: int, tx_type: str, source: str = "card") -> str:
+def _source_hash(tx_date: date, description: str, amount_cents: int, tx_type: str, source: str = "card", occurrence: int = 0) -> str:
     raw = f"{source}|{tx_date.isoformat()}|{description.strip().lower()}|{amount_cents}|{tx_type}"
+    if occurrence > 0:
+        raw = f"{raw}|{occurrence}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _assign_occurrences(rows: list[ParsedRow], source: str = "card") -> None:
+    counts: dict[tuple[date, str, int, str], int] = {}
+    for row in rows:
+        key = (row.transaction_date, row.description.strip().lower(), row.amount_cents, row.transaction_type)
+        occurrence = counts.get(key, 0)
+        if occurrence > 0:
+            row.source_hash = _source_hash(
+                row.transaction_date,
+                row.description,
+                row.amount_cents,
+                row.transaction_type,
+                source,
+                occurrence,
+            )
+        counts[key] = occurrence + 1
 
 
 def _row(tx_date: date, description: str, signed_amount: Decimal, row_number: int, source: str = "card") -> Optional[ParsedRow]:
@@ -233,6 +252,9 @@ def _parse_xls(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
 def parse_statement(filename: str, content: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
     suffix = filename.lower().rsplit(".", 1)[-1]
     if suffix == "xls":
-        return _parse_xls(content, source)
-    return _parse_csv(content, source)
+        rows, fmt, errors = _parse_xls(content, source)
+    else:
+        rows, fmt, errors = _parse_csv(content, source)
+    _assign_occurrences(rows, source)
+    return rows, fmt, errors
 
