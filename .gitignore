@@ -72,8 +72,14 @@ Thumbs.db
 # Local assistant/debug workspace files
 .claude/
 DEBUG.md
+AI-Context/
+AGENTS.md
+CLAUDE.md
 
 # Loose data files dropped in the repo root (statements, exports, etc.)
 /*.csv
 /*.xls
 /*.xlsx
+
+#vault
+.obsidian/
