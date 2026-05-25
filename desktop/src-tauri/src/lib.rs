@@ -10,6 +10,10 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent};
+#[cfg(not(debug_assertions))]
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+#[cfg(not(debug_assertions))]
+use tauri_plugin_updater::UpdaterExt;
 
 struct BackendProcess(Mutex<Option<Child>>);
 struct DesktopToken(Mutex<Option<String>>);
@@ -210,13 +214,103 @@ fn navigate_to_backend(app: AppHandle) {
                 }
             }
         }
+
+        // Only check for updates once the backend is reachable, so the
+        // prompt never appears before the user has seen the app.
+        spawn_update_check(app);
     });
 }
+
+fn stop_backend(app: &AppHandle) {
+    if let Some(state) = app.try_state::<BackendProcess>() {
+        if let Some(mut child) = state.0.lock().unwrap().take() {
+            debug_log("stopping backend process");
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
+async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
+    debug_log("checking for updates");
+    let Some(update) = app.updater()?.check().await? else {
+        debug_log("no update available");
+        return Ok(());
+    };
+
+    debug_log(&format!(
+        "update available: current={} latest={}",
+        update.current_version, update.version
+    ));
+
+    // blocking_show() is intentional: we're already on a tokio worker thread
+    // (not the main thread, which would deadlock), and treating the dialog as
+    // a synchronous gate keeps the control flow straight. The async show()
+    // variant adds a callback indirection without any real benefit here.
+    let should_install = app
+        .dialog()
+        .message(format!(
+            "Credit Tracker {} is available. Install it now?",
+            update.version
+        ))
+        .title("Update available")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Install".to_string(),
+            "Later".to_string(),
+        ))
+        .blocking_show();
+
+    if !should_install {
+        debug_log("user deferred update");
+        return Ok(());
+    }
+
+    const PROGRESS_LOG_INTERVAL: usize = 1024 * 1024; // 1 MiB
+    let mut downloaded = 0usize;
+    let mut next_log_at = PROGRESS_LOG_INTERVAL;
+    update
+        .download_and_install(
+            |chunk_length, content_length| {
+                downloaded += chunk_length;
+                if downloaded >= next_log_at {
+                    debug_log(&format!(
+                        "downloaded update bytes: {} of {:?}",
+                        downloaded, content_length
+                    ));
+                    next_log_at = downloaded + PROGRESS_LOG_INTERVAL;
+                }
+            },
+            || {
+                debug_log("update download finished");
+            },
+        )
+        .await?;
+
+    debug_log("update installed, restarting app");
+    stop_backend(&app);
+    app.restart();
+}
+
+#[cfg(not(debug_assertions))]
+fn spawn_update_check(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = check_for_update(app).await {
+            debug_log(&format!("update check failed: {e}"));
+        }
+    });
+}
+
+#[cfg(debug_assertions)]
+fn spawn_update_check(_app: AppHandle) {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     debug_log("run() called");
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -284,12 +378,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let RunEvent::ExitRequested { .. } = event {
-                if let Some(state) = app.try_state::<BackendProcess>() {
-                    if let Some(mut child) = state.0.lock().unwrap().take() {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                    }
-                }
+                stop_backend(app);
             }
         });
 }

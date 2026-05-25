@@ -27,6 +27,7 @@ dev = [
 ]
 packaging = [
     "pyinstaller>=6.6",
+    "pyarmor>=9.0",
 ]
 audit = [
     "pip-audit>=2.9",

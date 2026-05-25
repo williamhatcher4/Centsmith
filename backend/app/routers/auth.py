@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, Request, Form, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Form, status
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models.user import User

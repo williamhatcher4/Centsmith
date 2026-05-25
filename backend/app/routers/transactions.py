@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import io
 from datetime import datetime, timezone, date
 from typing import Literal, Optional

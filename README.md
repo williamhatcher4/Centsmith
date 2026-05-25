@@ -197,9 +197,35 @@ The first build takes 10–15 minutes (Cargo compiles all Tauri dependencies fro
 # Skip Tauri and Inno Setup (backend changes only):
 .\packaging\build.ps1 -SkipTauri
 
+# Release backend bundle path (uses PyArmor):
+.\packaging\build.ps1 -SkipTauri -ObfuscateBackend
+
 # Skip Inno Setup (Tauri shell changes only):
 .\packaging\build.ps1 -SkipInstaller
 ```
+
+After staging the backend into `desktop\src-tauri\resources\backend`,
+`build.ps1` unconditionally runs `packaging\validate-release-artifacts.ps1`,
+which aborts the build if any `.env`, `.pfx`, `.p12`, `.pem`, or `.key` file
+— or any file whose name contains `private`, `credential`, `password`,
+`signing-key`, or `signing_key` — has slipped into the staged bundle.
+
+### Publishing signed auto-updates
+
+The release workflow publishes signed updater artifacts to the public
+`williamhatcher4/credit_tracker_releases` repo while keeping this source repo
+private. Before running `.github/workflows/release.yml`, add these secrets to
+the private source repo:
+
+- `PUBLIC_RELEASES_TOKEN` - fine-grained token with contents write access to
+  `williamhatcher4/credit_tracker_releases`
+- `TAURI_SIGNING_PRIVATE_KEY` - contents of `packaging\credit-tracker-updater.key`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` - blank if the generated key has no password
+- `WINDOWS_CERTIFICATE_BASE64` - base64 encoded `.pfx` code-signing certificate
+- `WINDOWS_CERTIFICATE_PASSWORD` - `.pfx` password
+
+The updater public key is committed in `desktop\src-tauri\tauri.conf.json`.
+Keep the private updater key and Windows signing certificate out of git.
 
 ---
 

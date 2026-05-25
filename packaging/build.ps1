@@ -3,6 +3,7 @@
 # Pipeline:
 #   1. npm run build                       -> frontend/dist
 #   2. pyinstaller packaging/backend.spec  -> packaging/dist/credit-tracker-backend/
+#      optional: -ObfuscateBackend routes this through PyArmor for release builds
 #   3. copy backend bundle into            -> desktop/src-tauri/resources/backend/
 #   4. cargo tauri build                   -> desktop/src-tauri/target/release/bundle/nsis/
 #
@@ -15,10 +16,12 @@
 #
 # Usage:
 #   ./packaging/build.ps1
+#   ./packaging/build.ps1 -SkipTauri -ObfuscateBackend
 
 [CmdletBinding()]
 param(
-    [switch]$SkipTauri
+    [switch]$SkipTauri,
+    [switch]$ObfuscateBackend
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,6 +32,7 @@ $Frontend = Join-Path $Root "frontend"
 $Packaging = Join-Path $Root "packaging"
 $Desktop = Join-Path $Root "desktop"
 $Python = Join-Path $Backend ".venv\Scripts\python.exe"
+$PyArmor = Join-Path $Backend ".venv\Scripts\pyarmor.exe"
 $BackendOut = Join-Path $Packaging "dist\credit-tracker-backend"
 $ResourceTarget = Join-Path $Desktop "src-tauri\resources\backend"
 
@@ -70,14 +74,41 @@ if ($LASTEXITCODE -ne 0) {
 }
 $BuildDir = Join-Path $Packaging "build"
 $DistDir = Join-Path $Packaging "dist"
-& $Python -m PyInstaller (Join-Path $Packaging "backend.spec") `
-    --distpath $DistDir --workpath $BuildDir --noconfirm
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
+if ($ObfuscateBackend) {
+    & $Python -m pip show pyarmor > $null 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Installing PyArmor into backend venv..." -ForegroundColor Yellow
+        & $Python -m pip install "pyarmor>=9.0"
+    }
+
+    $PyiOptions = "--distpath `"$DistDir`" --workpath `"$BuildDir`" --noconfirm"
+    if (-not (Test-Path $PyArmor)) {
+        throw "PyArmor executable not found at $PyArmor"
+    }
+
+    # PyArmor's `cfg` parses three positional tokens after the subcommand:
+    # <key> <op> <value>. PowerShell tokenizes the bare `=` as its own arg,
+    # which matches that grammar — do NOT collapse to "key=value".
+    & $PyArmor cfg pack:pyi_options = $PyiOptions
+    if ($LASTEXITCODE -ne 0) { throw "PyArmor config failed" }
+
+    & $PyArmor gen --pack (Join-Path $Packaging "backend.spec") `
+        -r (Join-Path $Packaging "backend_entry.py") (Join-Path $Backend "app")
+    if ($LASTEXITCODE -ne 0) { throw "PyArmor/PyInstaller build failed" }
+} else {
+    & $Python -m PyInstaller (Join-Path $Packaging "backend.spec") `
+        --distpath $DistDir --workpath $BuildDir --noconfirm
+    if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
+}
 
 Step "3/4  Stage backend bundle into Tauri resources/"
+if (-not (Test-Path $BackendOut)) {
+    throw "Backend bundle output not found at $BackendOut"
+}
 if (Test-Path $ResourceTarget) { Remove-Item -Recurse -Force $ResourceTarget }
 New-Item -ItemType Directory -Force -Path $ResourceTarget | Out-Null
 Copy-Item -Recurse -Force -Path (Join-Path $BackendOut "*") -Destination $ResourceTarget
+& (Join-Path $Packaging "validate-release-artifacts.ps1") -Path $ResourceTarget
 
 if ($SkipTauri) {
     Write-Host "Skipping Tauri build (-SkipTauri). Backend staged at $ResourceTarget" -ForegroundColor Yellow

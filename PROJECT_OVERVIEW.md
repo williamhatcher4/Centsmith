@@ -42,11 +42,16 @@ Desktop data and logs:
 - Database: `%APPDATA%\CreditTracker\credit_tracker.db`.
 - Shell debug log: `%APPDATA%\CreditTracker\shell.log`.
 - Runtime metadata: `%APPDATA%\CreditTracker\runtime.json`, short-lived and deleted after launch.
+- Session-signing key: `%APPDATA%\CreditTracker\secret.key.dpapi`, DPAPI-encrypted under the current Windows user. Legacy plaintext `secret.key` files are migrated and deleted on first run.
 
 Build the installer from the repo root:
 
 ```powershell
+# Local installer (PyInstaller backend, unsigned):
 ./packaging/build.ps1
+
+# Release backend bundle (PyArmor-obfuscated, only useful with CI signing):
+./packaging/build.ps1 -SkipTauri -ObfuscateBackend
 ```
 
 ### Developer Mode
@@ -81,6 +86,13 @@ Login protection:
 Desktop mode uses the `/desktop-login` bootstrap route instead of showing a login screen. The token is per run, one-time-use, and only enabled when `desktop_mode` is true.
 
 Tauri uses a restrictive content security policy in `desktop/src-tauri/tauri.conf.json`; asset CSP modification and JS eval navigation are disabled.
+
+Secrets at rest:
+
+- The session-cookie signing key (`Settings.secret_key`) is generated lazily in `backend/app/config.py:_default_secret_key`. In development it is the static `dev-credit-tracker-change-me`.
+- In frozen Windows builds it is persisted as `%APPDATA%\CreditTracker\secret.key.dpapi`, encrypted with `CryptProtectData` (DPAPI, user scope, no entropy). The key cannot be decrypted by another Windows user or off the device.
+- On a decrypt failure (different user profile, restored from a non-DPAPI backup) the key is rotated automatically and a one-line warning is written to stderr. Existing sessions are invalidated; the app keeps running.
+- File creation uses `O_EXCL` so a lost race re-reads the winner's value rather than overwriting.
 
 ## Main User Flows
 
@@ -208,6 +220,32 @@ cd backend
 
 The initial migration can create an empty SQLite database and can also upgrade older local databases that are missing `expensed` or `personal_category`.
 
+## Release Pipeline
+
+Signed Windows releases are built by `.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`. The source repo stays private; the workflow publishes installers and the Tauri updater manifest to the public `williamhatcher4/credit_tracker_releases` repo.
+
+Pipeline stages:
+
+1. Backend tests, `pip_audit`, frontend lint and audit, `cargo check`.
+2. Decode the base64'd PFX into the runner's temp dir and export its path.
+3. Inject the tag version (`vX.Y.Z`) into `desktop/src-tauri/tauri.conf.json`. The committed version stays at `0.1.0` as a sentinel — CI is the only place it's mutated.
+4. Run `packaging/build.ps1 -SkipTauri -ObfuscateBackend`. PyArmor obfuscates the sidecar, PyInstaller packs it, and `packaging/validate-release-artifacts.ps1` aborts the build if any `.env`, `.pfx`, `.p12`, `.pem`, or `.key` file — or any file named `private`, `credential`, `password`, `signing-key`, or `signing_key` — has slipped into the staged bundle.
+5. `tauri-apps/tauri-action@v0` builds the Tauri shell, invokes `packaging/sign-windows.ps1` (Authenticode SHA256 + RFC 3161 timestamp) for every produced binary, generates updater `.sig` files, and publishes the NSIS installer plus `latest.json` to the public release.
+
+Auto-update at runtime:
+
+- `tauri-plugin-updater` polls `https://github.com/williamhatcher4/credit_tracker_releases/releases/latest/download/latest.json` once the backend is reachable. The committed minisign public key in `tauri.conf.json` verifies signatures.
+- If a newer version exists the user is prompted; on accept, NSIS runs in `passive` mode, the backend sidecar is stopped cleanly, and the app restarts.
+- Update prompt is fired from the navigate thread after `wait_for_port_open` succeeds — never before the user sees the login screen.
+
+Required GitHub secrets:
+
+- `PUBLIC_RELEASES_TOKEN` — fine-grained token with contents-write on `credit_tracker_releases`.
+- `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — minisign keypair for updater artifacts.
+- `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` — Authenticode PFX and its password.
+
+For local signing on a developer workstation, prefer importing the PFX into the user's cert store once and signing via `/sha1 <thumbprint>` — `packaging/sign-windows.ps1` documents the `/p`-on-argv trade-off CI accepts but locals shouldn't.
+
 ## Important Backend Endpoints
 
 - `GET /health`
@@ -256,9 +294,12 @@ Desktop and packaging:
 - `packaging/backend_entry.py`
 - `packaging/backend.spec`
 - `packaging/build.ps1`
+- `packaging/sign-windows.ps1`
+- `packaging/validate-release-artifacts.ps1`
 - `packaging/installer.iss`
 - `desktop/src-tauri/src/lib.rs`
 - `desktop/src-tauri/tauri.conf.json`
+- `.github/workflows/release.yml`
 
 ## Tests And Checks
 
@@ -284,3 +325,5 @@ cargo audit --manifest-path desktop\src-tauri\Cargo.toml
 ```
 
 GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs backend tests, `pip-audit`, frontend lint/build/audit, `cargo check`, and `cargo audit`.
+
+Signed releases are produced by `.github/workflows/release.yml` — see the [Release Pipeline](#release-pipeline) section above.

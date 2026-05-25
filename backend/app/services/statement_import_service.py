@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import hashlib
 import io
 import re
@@ -257,4 +257,3 @@ def parse_statement(filename: str, content: bytes, source: str = "card") -> tupl
         rows, fmt, errors = _parse_csv(content, source)
     _assign_occurrences(rows, source)
     return rows, fmt, errors
-

@@ -23,7 +23,7 @@ jobs:
 
       - name: Install backend
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install -e "backend[dev,audit]"
 
       - name: Backend tests
@@ -67,6 +67,13 @@ jobs:
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
+
+      - name: Stage placeholder Tauri resources
+        shell: pwsh
+        working-directory: desktop/src-tauri
+        run: |
+          New-Item -ItemType Directory -Force -Path resources/backend | Out-Null
+          New-Item -ItemType File -Force -Path resources/backend/.gitkeep | Out-Null
 
       - name: Desktop check
         working-directory: desktop/src-tauri

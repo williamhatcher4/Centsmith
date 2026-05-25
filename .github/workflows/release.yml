@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag, for example v0.1.1"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
+  PUBLIC_RELEASE_OWNER: williamhatcher4
+  PUBLIC_RELEASE_REPO: credit_tracker_releases
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout private source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create backend venv
+        run: python -m venv backend\.venv
+
+      - name: Install backend dependencies
+        run: |
+          backend\.venv\Scripts\python.exe -m pip install --upgrade pip
+          backend\.venv\Scripts\python.exe -m pip install -e "backend[dev,audit,packaging]"
+
+      - name: Backend tests
+        working-directory: backend
+        run: .\.venv\Scripts\python.exe -m pytest
+
+      - name: Backend audit
+        working-directory: backend
+        run: .\.venv\Scripts\python.exe -m pip_audit
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Frontend audit
+        working-directory: frontend
+        run: npm run audit
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Desktop check
+        working-directory: desktop/src-tauri
+        run: cargo check
+
+      - name: Decode Windows signing certificate
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
+            throw "WINDOWS_CERTIFICATE_BASE64 secret is required."
+          }
+          $certPath = Join-Path $env:RUNNER_TEMP "credit-tracker-code-signing.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          "WINDOWS_CERTIFICATE_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CI_RELEASE_SIGNING_REQUIRED=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Sync tauri.conf.json version to release tag
+        shell: pwsh
+        run: |
+          $tag = "${{ env.RELEASE_TAG }}"
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') {
+            throw "RELEASE_TAG must look like v0.1.1, got $tag"
+          }
+          $version = $Matches[1]
+          $confPath = "desktop/src-tauri/tauri.conf.json"
+          $conf = Get-Content -Raw -LiteralPath $confPath | ConvertFrom-Json
+          $conf.version = $version
+          $conf | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $confPath -Encoding utf8
+
+      - name: Build obfuscated backend resources
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: .\packaging\build.ps1 -SkipTauri -ObfuscateBackend
+
+      - name: Build, sign, and publish Tauri release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_PATH: ${{ env.WINDOWS_CERTIFICATE_PATH }}
+          CI_RELEASE_SIGNING_REQUIRED: "1"
+        with:
+          projectPath: desktop/src-tauri
+          owner: ${{ env.PUBLIC_RELEASE_OWNER }}
+          repo: ${{ env.PUBLIC_RELEASE_REPO }}
+          releaseCommitish: main
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: "Credit Tracker ${{ env.RELEASE_TAG }}"
+          releaseDraft: false
+          prerelease: false
+          generateReleaseNotes: true
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true

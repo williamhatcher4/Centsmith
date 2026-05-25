@@ -13,6 +13,7 @@ import os
 import secrets
 import socket
 import sys
+import traceback
 from pathlib import Path
 
 
@@ -34,6 +35,14 @@ def _user_data_dir() -> Path:
     return target
 
 
+def _debug_log(data_dir: Path, message: str) -> None:
+    try:
+        with (data_dir / "backend-sidecar.log").open("a", encoding="utf-8") as handle:
+            handle.write(message + "\n")
+    except OSError:
+        pass
+
+
 def main() -> None:
     os.environ.setdefault("DESKTOP_MODE", "1")
     os.environ.setdefault("ENVIRONMENT", "production")
@@ -50,11 +59,18 @@ def main() -> None:
     runtime_file.write_text(json.dumps({"port": port, "token": token}), encoding="utf-8")
     pid_file.write_text(str(os.getpid()), encoding="utf-8")
 
-    import uvicorn
-    from app.main import app
-
     try:
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+        _debug_log(data_dir, "importing uvicorn")
+        import uvicorn
+
+        _debug_log(data_dir, "importing app.main")
+        from app.main import app
+
+        _debug_log(data_dir, f"starting uvicorn on port {port}")
+        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", log_config=None)
+    except Exception:
+        _debug_log(data_dir, traceback.format_exc())
+        raise
     finally:
         for path in (runtime_file, pid_file):
             try:
