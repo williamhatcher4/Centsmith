@@ -102,9 +102,9 @@ def test_auth_required_and_login_sets_session(client):
     assert response.json()["username"] == "user1"
 
 
-def test_transaction_lists_and_dashboard_count_only_debits(client, db_session):
+def test_transaction_lists_show_debits_default_and_credits_in_unsorted(client, db_session):
     debit = add_transaction(db_session, description="Coffee", amount_cents=425, transaction_type="debit")
-    add_transaction(db_session, description="Refund", amount_cents=425, transaction_type="credit")
+    refund = add_transaction(db_session, description="Refund", amount_cents=425, transaction_type="credit")
     add_transaction(
         db_session,
         description="Client lunch",
@@ -123,18 +123,18 @@ def test_transaction_lists_and_dashboard_count_only_debits(client, db_session):
 
     response = client.get("/api/v1/transactions", params={"classification": "unsorted"})
     assert response.status_code == 200
-    assert [row["id"] for row in response.json()] == [debit.id]
+    assert {row["id"] for row in response.json()} == {debit.id, refund.id}
 
     dashboard = client.get("/api/v1/transactions/dashboard").json()
-    assert dashboard["unsorted_count"] == 1
+    assert dashboard["unsorted_count"] == 2
     assert dashboard["work_total_cents"] == 3200
 
 
-def test_import_preview_and_confirm_ignore_credits(client, db_session):
+def test_import_preview_and_confirm_ignore_card_payment_credits(client, db_session):
     login(client)
     files = statement_file([
         ["2026-05-01", "Coffee", "4.25", ""],
-        ["2026-05-02", "Refund", "", "4.25"],
+        ["2026-05-02", "PAYMENT - THANK YOU", "", "100.00"],
     ])
 
     preview = client.post("/api/v1/transactions/import/preview", files=files)
@@ -146,7 +146,7 @@ def test_import_preview_and_confirm_ignore_credits(client, db_session):
 
     confirm = client.post("/api/v1/transactions/import/confirm", files=statement_file([
         ["2026-05-01", "Coffee", "4.25", ""],
-        ["2026-05-02", "Refund", "", "4.25"],
+        ["2026-05-02", "PAYMENT - THANK YOU", "", "100.00"],
     ]))
     assert confirm.status_code == 200
     assert confirm.json() == {"imported": 1, "skipped": 0, "ignored_credits": 1, "skipped_errors": 0}
@@ -156,21 +156,195 @@ def test_import_preview_and_confirm_ignore_credits(client, db_session):
     assert stored[0].transaction_type == "debit"
 
 
-def test_duplicate_import_reports_skipped_debits_separately_from_credits(client):
+def test_duplicate_import_reports_skipped_debits_separately_from_payments(client):
     login(client)
     files = statement_file([
         ["2026-05-01", "Coffee", "4.25", ""],
-        ["2026-05-02", "Refund", "", "4.25"],
+        ["2026-05-02", "PAYMENT RECEIVED - THANK YOU", "", "100.00"],
     ])
     assert client.post("/api/v1/transactions/import/confirm", files=files).status_code == 200
 
     duplicate = client.post("/api/v1/transactions/import/confirm", files=statement_file([
         ["2026-05-01", "Coffee", "4.25", ""],
-        ["2026-05-02", "Refund", "", "4.25"],
+        ["2026-05-02", "PAYMENT RECEIVED - THANK YOU", "", "100.00"],
     ]))
 
     assert duplicate.status_code == 200
     assert duplicate.json() == {"imported": 0, "skipped": 1, "ignored_credits": 1, "skipped_errors": 0}
+
+
+def test_import_keeps_refund_credits_but_drops_payment_credits(client, db_session):
+    login(client)
+    files = statement_file([
+        ["2026-05-01", "Coffee", "4.25", ""],
+        ["2026-05-02", "PAYMENT - THANK YOU", "", "100.00"],
+        ["2026-05-03", "REFUND - STARBUCKS", "", "4.25"],
+    ])
+
+    confirm = client.post("/api/v1/transactions/import/confirm", files=files)
+    assert confirm.status_code == 200
+    assert confirm.json() == {"imported": 2, "skipped": 0, "ignored_credits": 1, "skipped_errors": 0}
+
+    stored = db_session.query(Transaction).order_by(Transaction.transaction_date).all()
+    assert [(tx.description, tx.transaction_type) for tx in stored] == [
+        ("Coffee", "debit"),
+        ("REFUND - STARBUCKS", "credit"),
+    ]
+
+
+def test_payment_match_is_case_insensitive(client, db_session):
+    login(client)
+    files = statement_file([
+        ["2026-05-01", "  payment - thank you  ", "", "100.00"],
+    ])
+    confirm = client.post("/api/v1/transactions/import/confirm", files=files)
+    assert confirm.json()["ignored_credits"] == 1
+    assert db_session.query(Transaction).count() == 0
+
+
+def test_payment_match_does_not_catch_substring(client, db_session):
+    login(client)
+    files = statement_file([
+        ["2026-05-01", "PAYMENT TO VENDOR - THANK YOU", "", "100.00"],
+    ])
+    confirm = client.post("/api/v1/transactions/import/confirm", files=files)
+    assert confirm.json() == {"imported": 1, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
+    stored = db_session.query(Transaction).one()
+    assert stored.transaction_type == "credit"
+
+
+def test_inbox_query_includes_unclassified_credits(client, db_session):
+    debit = add_transaction(db_session, description="Coffee", amount_cents=425, transaction_type="debit")
+    refund = add_transaction(db_session, description="REFUND - AMAZON", amount_cents=1200, transaction_type="credit")
+
+    login(client)
+
+    response = client.get("/api/v1/transactions", params={"classification": "unsorted"})
+    assert response.status_code == 200
+    assert {row["id"] for row in response.json()} == {debit.id, refund.id}
+
+
+def test_credit_can_be_assigned_spending_category(client, db_session):
+    refund = add_transaction(
+        db_session,
+        description="REFUND - GROCERIES",
+        amount_cents=1500,
+        transaction_type="credit",
+        classification="personal",
+    )
+
+    login(client)
+
+    response = client.put(f"/api/v1/transactions/{refund.id}", json={"personal_category": "Groceries"})
+    assert response.status_code == 200
+    assert response.json()["personal_category"] == "Groceries"
+
+
+def test_personal_refund_offsets_spending(client, db_session):
+    add_transaction(
+        db_session,
+        description="Dinner",
+        amount_cents=5000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Dining",
+        transaction_date=date(2026, 5, 1),
+    )
+    add_transaction(
+        db_session,
+        description="Refund",
+        amount_cents=1000,
+        transaction_type="credit",
+        classification="personal",
+        personal_category="Dining",
+        transaction_date=date(2026, 5, 5),
+    )
+
+    login(client)
+
+    response = client.get("/api/v1/transactions/spending/personal", params={"months": 12})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_cents"] == 4000
+    dining = next(row for row in body["by_category"] if row["category_name"] == "Dining")
+    assert dining["amount_cents"] == 4000
+
+
+def test_dashboard_personal_cents_offsets_refunds(client, db_session):
+    add_transaction(
+        db_session,
+        description="Dinner",
+        amount_cents=5000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Dining",
+        transaction_date=date(2026, 5, 1),
+    )
+    add_transaction(
+        db_session,
+        description="Refund",
+        amount_cents=1000,
+        transaction_type="credit",
+        classification="personal",
+        personal_category="Dining",
+        transaction_date=date(2026, 5, 5),
+    )
+
+    login(client)
+
+    dashboard = client.get("/api/v1/transactions/dashboard").json()
+    assert dashboard["personal_total_cents"] == 4000
+
+
+def test_personal_list_includes_categorized_refund_credits(client, db_session):
+    debit = add_transaction(
+        db_session,
+        description="Dinner",
+        amount_cents=5000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Dining",
+    )
+    refund = add_transaction(
+        db_session,
+        description="Refund",
+        amount_cents=1000,
+        transaction_type="credit",
+        classification="personal",
+        personal_category="Dining",
+    )
+
+    login(client)
+
+    response = client.get("/api/v1/transactions", params={"classification": "personal"})
+    assert response.status_code == 200
+    assert {row["id"] for row in response.json()} == {debit.id, refund.id}
+
+
+def test_income_credits_do_not_offset_personal_spending(client, db_session):
+    add_transaction(
+        db_session,
+        description="Dinner",
+        amount_cents=5000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Dining",
+        transaction_date=date(2026, 5, 1),
+    )
+    add_transaction(
+        db_session,
+        description="Paycheck",
+        amount_cents=200000,
+        transaction_type="credit",
+        classification="personal",
+        personal_category="Income",
+        transaction_date=date(2026, 5, 15),
+    )
+
+    login(client)
+
+    body = client.get("/api/v1/transactions/spending/personal").json()
+    assert body["total_cents"] == 5000
 
 
 def test_legitimately_duplicate_rows_in_one_file_are_both_imported(client, db_session):

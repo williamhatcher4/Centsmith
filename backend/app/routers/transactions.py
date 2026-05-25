@@ -4,7 +4,7 @@ from datetime import datetime, timezone, date
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models.transaction import Transaction
@@ -31,29 +31,46 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 INCOME_CATEGORIES = {"Income", "Reimbursement"}
 TRANSFER_CATEGORY = "Transfer"
+CARD_PAYMENT_DESCRIPTIONS = frozenset({"PAYMENT - THANK YOU", "PAYMENT RECEIVED - THANK YOU"})
+
+
+def _is_card_payment(row) -> bool:
+    return (
+        row.transaction_type == "credit"
+        and row.description.strip().upper() in CARD_PAYMENT_DESCRIPTIONS
+    )
 
 
 def _base_query(db: Session):
     return db.query(Transaction).filter(Transaction.transaction_type == "debit")
 
 
+def _personal_signed_amount():
+    return case(
+        (Transaction.transaction_type == "debit", Transaction.amount_cents),
+        else_=-Transaction.amount_cents,
+    )
+
+
+def _personal_spending_filters():
+    return [
+        Transaction.classification == "personal",
+        func.coalesce(Transaction.personal_category, "") != TRANSFER_CATEGORY,
+        ~(
+            (Transaction.transaction_type == "credit")
+            & (Transaction.personal_category.in_(list(INCOME_CATEGORIES)))
+        ),
+    ]
+
+
 def _validate_personal_category(category: Optional[str], tx_type: str) -> None:
-    if category is None:
+    if category is None or category == TRANSFER_CATEGORY:
         return
-    if category == TRANSFER_CATEGORY:
-        return
-    if category in INCOME_CATEGORIES:
-        if tx_type != "credit":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Income/Reimbursement categories only apply to credit transactions",
-            )
-    else:
-        if tx_type != "debit":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Spending categories only apply to debit transactions",
-            )
+    if category in INCOME_CATEGORIES and tx_type != "credit":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Income/Reimbursement categories only apply to credit transactions",
+        )
 
 
 @router.get("", response_model=list[TransactionOut])
@@ -68,7 +85,7 @@ def list_transactions(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if personal_category == "uncategorized":
+    if personal_category == "uncategorized" or classification in {"unsorted", "personal", "work"}:
         q = db.query(Transaction)
     else:
         q = _base_query(db)
@@ -103,7 +120,7 @@ async def preview_import(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    spending_rows = [row for row in rows if row.transaction_type == "debit"]
+    spending_rows = [row for row in rows if not _is_card_payment(row)]
     ignored_credits = len(rows) - len(spending_rows)
     hashes = [row.source_hash for row in spending_rows]
     existing = set()
@@ -147,7 +164,7 @@ async def confirm_import(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     imported = skipped = 0
-    spending_rows = [row for row in rows if row.transaction_type == "debit"]
+    spending_rows = [row for row in rows if not _is_card_payment(row)]
     ignored_credits = len(rows) - len(spending_rows)
     hashes = [row.source_hash for row in spending_rows]
     existing = set()
@@ -287,17 +304,13 @@ def bulk_categorize_personal(
     not_personal = [tx.id for tx in txs if tx.classification != "personal"]
     if not_personal:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only personal transactions can be categorized")
-    if payload.personal_category != TRANSFER_CATEGORY:
-        is_income = payload.personal_category in INCOME_CATEGORIES
-        expected_type = "credit" if is_income else "debit"
-        mismatched = [tx.id for tx in txs if tx.transaction_type != expected_type]
+    if payload.personal_category in INCOME_CATEGORIES:
+        mismatched = [tx.id for tx in txs if tx.transaction_type != "credit"]
         if mismatched:
-            detail = (
-                "Income/Reimbursement categories only apply to credit transactions"
-                if is_income
-                else "Spending categories only apply to debit transactions"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Income/Reimbursement categories only apply to credit transactions",
             )
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
     for tx in txs:
         tx.personal_category = payload.personal_category
         tx.updated_at = datetime.now(timezone.utc)
@@ -390,14 +403,12 @@ def personal_spending(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    signed = _personal_signed_amount()
+    common_filters = _personal_spending_filters()
     month_rows = db.query(
         func.strftime("%Y-%m", Transaction.transaction_date).label("month"),
-        func.sum(Transaction.amount_cents).label("amount"),
-    ).filter(
-        Transaction.classification == "personal",
-        Transaction.transaction_type == "debit",
-        func.coalesce(Transaction.personal_category, "") != TRANSFER_CATEGORY,
-    ).group_by("month").order_by("month").all()
+        func.sum(signed).label("amount"),
+    ).filter(*common_filters).group_by("month").order_by("month").all()
     selected_months = [month for month, _ in month_rows][-months:]
 
     category_rows = []
@@ -405,11 +416,9 @@ def personal_spending(
         category_rows = db.query(
             func.strftime("%Y-%m", Transaction.transaction_date).label("month"),
             func.coalesce(Transaction.personal_category, "Uncategorized").label("category"),
-            func.sum(Transaction.amount_cents).label("amount"),
+            func.sum(signed).label("amount"),
         ).filter(
-            Transaction.classification == "personal",
-            Transaction.transaction_type == "debit",
-            func.coalesce(Transaction.personal_category, "") != TRANSFER_CATEGORY,
+            *common_filters,
             func.strftime("%Y-%m", Transaction.transaction_date).in_(selected_months),
         ).group_by("month", "category").order_by("month", "category").all()
 
@@ -447,15 +456,21 @@ def dashboard(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    spend_rows = db.query(
+    personal_spend_rows = db.query(
         func.strftime("%Y-%m", Transaction.transaction_date).label("month"),
-        Transaction.classification,
+        func.sum(_personal_signed_amount()).label("amount"),
+    ).filter(*_personal_spending_filters()).group_by("month").order_by("month").all()
+    work_spend_rows = db.query(
+        func.strftime("%Y-%m", Transaction.transaction_date).label("month"),
         func.sum(Transaction.amount_cents).label("amount"),
     ).filter(
         Transaction.transaction_type == "debit",
-        Transaction.classification.in_(["personal", "work"]),
+        Transaction.classification == "work",
         func.coalesce(Transaction.personal_category, "") != TRANSFER_CATEGORY,
-    ).group_by("month", Transaction.classification).order_by("month").all()
+    ).group_by("month").order_by("month").all()
+    spend_rows = [(month, "personal", amount) for month, amount in personal_spend_rows] + [
+        (month, "work", amount) for month, amount in work_spend_rows
+    ]
 
     income_rows = db.query(
         func.strftime("%Y-%m", Transaction.transaction_date).label("month"),
@@ -500,7 +515,7 @@ def dashboard(
         Transaction.personal_category.is_(None),
     ).one()
 
-    unsorted_count = _base_query(db).filter(Transaction.classification.is_(None)).count()
+    unsorted_count = db.query(Transaction).filter(Transaction.classification.is_(None)).count()
     latest_month = summary_months[-1].month if summary_months else None
     return DashboardSummary(
         personal_total_cents=personal_total,

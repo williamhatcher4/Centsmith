@@ -26,7 +26,7 @@ function CategoryRow({ category, color, perMonthCents }: { category: SpendingByC
         </div>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
-        <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${category.percent}%`, background: color }} />
+        <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${Math.max(0, Math.min(100, category.percent))}%`, background: color }} />
       </div>
       <div className="mt-1 text-[11px] text-[var(--text-faint)]">{category.percent.toFixed(1)}%</div>
     </div>

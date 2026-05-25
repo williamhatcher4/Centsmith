@@ -22,10 +22,11 @@ const SPENDING_CATEGORIES = [
   'Other',
   'Transfer',
 ]
-const INCOME_CATEGORIES = ['Income', 'Reimbursement', 'Transfer']
+const INCOME_CATEGORIES = ['Income', 'Reimbursement']
+const CREDIT_CATEGORIES = [...INCOME_CATEGORIES, ...SPENDING_CATEGORIES]
 
 function categoriesFor(tx: Transaction) {
-  return tx.transaction_type === 'credit' ? INCOME_CATEGORIES : SPENDING_CATEGORIES
+  return tx.transaction_type === 'credit' ? CREDIT_CATEGORIES : SPENDING_CATEGORIES
 }
 
 function fmtDate(d: string) {
@@ -64,7 +65,7 @@ export function PersonalInboxPage() {
     selected.length === 0 ? null : selectedTypes.size === 1 ? ([...selectedTypes][0] as 'credit' | 'debit') : 'mixed'
   const bulkCategoryOptions =
     selectionType === 'credit'
-      ? INCOME_CATEGORIES
+      ? CREDIT_CATEGORIES
       : selectionType === 'debit'
         ? SPENDING_CATEGORIES
         : selectionType === 'mixed'
