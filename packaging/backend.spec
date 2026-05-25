@@ -26,20 +26,29 @@ if not FRONTEND_DIST.is_dir():
 
 sys.path.insert(0, str(BACKEND))
 
-datas = [(str(FRONTEND_DIST), "frontend/dist")]
+datas = [
+    (str(FRONTEND_DIST), "frontend/dist"),
+    (str(BACKEND / "alembic.ini"), "."),
+    (str(BACKEND / "alembic"), "alembic"),
+]
 
 hiddenimports = [
     "app.main",
     "app.config",
     "app.database",
     "app.dependencies",
+    "app.migrations",
+    "app.routers.desktop",
     "app.routers.auth",
     "app.routers.transactions",
     "app.models.user",
     "app.models.transaction",
     "app.schemas.transaction",
     "app.services.auth_service",
+    "app.services.desktop_auth_service",
     "app.services.statement_import_service",
+    "app.services.transaction_import_service",
+    "alembic",
     "uvicorn.logging",
     "uvicorn.loops.auto",
     "uvicorn.protocols.http.auto",

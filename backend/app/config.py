@@ -41,8 +41,11 @@ class Settings(BaseSettings):
     database_url: str = _default_database_url()
     cors_origins: str = "http://localhost:5175,http://127.0.0.1:5175"
     desktop_mode: bool = _default_desktop_mode()
+    desktop_auth_token: str | None = None
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_seconds: int = 15 * 60
 
-    # Seed-only — consumed by scripts/seed_db.py, not the running app.
+    # Seed-only - consumed by scripts/seed_db.py, not the running app.
     admin_username: str | None = None
     admin_password: str | None = None
 

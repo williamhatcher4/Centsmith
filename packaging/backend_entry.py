@@ -1,14 +1,16 @@
 """PyInstaller entry point for the Credit Tracker backend sidecar.
 
-Picks a free port, writes it to %APPDATA%\\CreditTracker\\port.txt so the Tauri
-shell can discover it, then launches uvicorn against ``app.main:app``.
+Picks a free port, writes runtime metadata to %APPDATA%\\CreditTracker so the
+Tauri shell can discover it, then launches uvicorn against ``app.main:app``.
 
 This module is the value of ``backend.spec``'s ``Analysis(...)`` first arg, so
-it must be importable standalone — no relative imports from ``app``.
+it must be importable standalone; no relative imports from ``app``.
 """
 from __future__ import annotations
 
+import json
 import os
+import secrets
 import socket
 import sys
 from pathlib import Path
@@ -38,12 +40,14 @@ def main() -> None:
 
     port_override = os.environ.get("CREDIT_TRACKER_PORT")
     port = int(port_override) if port_override else _pick_free_port()
+    token = secrets.token_urlsafe(32)
+    os.environ["DESKTOP_AUTH_TOKEN"] = token
 
     data_dir = _user_data_dir()
-    port_file = data_dir / "port.txt"
+    runtime_file = data_dir / "runtime.json"
     pid_file = data_dir / "backend.pid"
 
-    port_file.write_text(str(port), encoding="utf-8")
+    runtime_file.write_text(json.dumps({"port": port, "token": token}), encoding="utf-8")
     pid_file.write_text(str(os.getpid()), encoding="utf-8")
 
     import uvicorn
@@ -52,7 +56,7 @@ def main() -> None:
     try:
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
     finally:
-        for path in (port_file, pid_file):
+        for path in (runtime_file, pid_file):
             try:
                 path.unlink()
             except FileNotFoundError:

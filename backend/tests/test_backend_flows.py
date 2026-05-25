@@ -4,26 +4,37 @@ from datetime import date, datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
-from app.database import Base
+from app.config import settings
 from app.dependencies import get_db
 from app.main import app
+from app.migrations import run_migrations
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.services.auth_service import hash_password
+from app.services.auth_service import clear_all_login_failures, hash_password
+from app.services.desktop_auth_service import reset_desktop_token_for_tests
+
+
+@pytest.fixture(autouse=True)
+def reset_auth_state():
+    clear_all_login_failures()
+    reset_desktop_token_for_tests()
+    yield
+    clear_all_login_failures()
+    reset_desktop_token_for_tests()
 
 
 @pytest.fixture()
-def db_session():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
+def db_session(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+    db_url = f"sqlite:///{db_path}"
+    monkeypatch.setattr(settings, "database_url", db_url)
+
+    run_migrations()
+
+    engine = create_engine(db_url, connect_args={"check_same_thread": False})
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestingSessionLocal()
     try:
@@ -32,7 +43,7 @@ def db_session():
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
 
 
 @pytest.fixture()
@@ -102,6 +113,61 @@ def test_auth_required_and_login_sets_session(client):
     assert response.json()["username"] == "user1"
 
 
+def test_bad_login_returns_401_and_lockout_returns_429(client, monkeypatch):
+    monkeypatch.setattr(settings, "login_rate_limit_attempts", 2)
+    monkeypatch.setattr(settings, "login_rate_limit_window_seconds", 900)
+
+    first = client.post("/api/v1/auth/login", data={"username": "user1", "password": "bad"})
+    second = client.post("/api/v1/auth/login", data={"username": "user1", "password": "bad"})
+    locked = client.post("/api/v1/auth/login", data={"username": "user1", "password": "bad"})
+
+    assert first.status_code == 401
+    assert second.status_code == 401
+    assert locked.status_code == 429
+
+
+def test_successful_login_clears_failed_attempts(client, monkeypatch):
+    monkeypatch.setattr(settings, "login_rate_limit_attempts", 2)
+    monkeypatch.setattr(settings, "login_rate_limit_window_seconds", 900)
+
+    assert client.post("/api/v1/auth/login", data={"username": "user1", "password": "bad"}).status_code == 401
+    login(client)
+
+    assert client.post("/api/v1/auth/login", data={"username": "user1", "password": "bad"}).status_code == 401
+
+
+def test_desktop_login_token_sets_session(client, monkeypatch):
+    monkeypatch.setattr(settings, "desktop_mode", True)
+    monkeypatch.setattr(settings, "desktop_auth_token", "desktop-token")
+
+    assert client.get("/api/v1/auth/me").status_code == 401
+    response = client.post("/desktop-login", data={"token": "desktop-token"})
+
+    assert response.status_code == 200
+    assert client.get("/api/v1/auth/me").json()["username"] == "local"
+
+
+def test_desktop_login_rejects_missing_invalid_and_reused_tokens(client, monkeypatch):
+    monkeypatch.setattr(settings, "desktop_mode", True)
+    monkeypatch.setattr(settings, "desktop_auth_token", "desktop-token")
+
+    assert client.post("/desktop-login").status_code == 401
+    assert client.post("/desktop-login", data={"token": "wrong"}).status_code == 401
+    assert client.post("/desktop-login", data={"token": "desktop-token"}).status_code == 200
+    assert client.post("/desktop-login", data={"token": "desktop-token"}).status_code == 401
+
+
+def test_desktop_bootstrap_serves_html_only_in_desktop_mode(client, monkeypatch):
+    monkeypatch.setattr(settings, "desktop_mode", False)
+    assert client.get("/desktop-bootstrap").status_code == 404
+
+    monkeypatch.setattr(settings, "desktop_mode", True)
+    response = client.get("/desktop-bootstrap")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Signing you in" in response.text
+
+
 def test_transaction_lists_show_debits_default_and_credits_in_unsorted(client, db_session):
     debit = add_transaction(db_session, description="Coffee", amount_cents=425, transaction_type="debit")
     refund = add_transaction(db_session, description="Refund", amount_cents=425, transaction_type="credit")
@@ -154,6 +220,19 @@ def test_import_preview_and_confirm_ignore_card_payment_credits(client, db_sessi
     stored = db_session.query(Transaction).all()
     assert len(stored) == 1
     assert stored[0].transaction_type == "debit"
+
+
+def test_import_rejects_oversized_upload_while_reading(client):
+    login(client)
+    too_large = b"x" * (10 * 1024 * 1024 + 1)
+
+    response = client.post(
+        "/api/v1/transactions/import/preview",
+        files={"file": ("huge.csv", too_large, "text/csv")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "File too large (max 10 MB)"
 
 
 def test_duplicate_import_reports_skipped_debits_separately_from_payments(client):
@@ -588,3 +667,57 @@ def test_personal_spending_includes_category_breakdown(client, db_session):
     assert body["total_cents"] == 7000
     assert [row["category_name"] for row in body["by_category"]] == ["Groceries", "Dining", "Uncategorized"]
     assert body["points"][0]["by_category"][0]["category_name"] == "Groceries"
+
+
+def test_migrations_create_empty_sqlite_database(tmp_path, monkeypatch):
+    db_path = tmp_path / "empty.db"
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{db_path}")
+
+    run_migrations()
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    inspector = inspect(engine)
+    assert {"users", "transactions", "alembic_version"}.issubset(set(inspector.get_table_names()))
+    transaction_columns = {column["name"] for column in inspector.get_columns("transactions")}
+    assert {"expensed", "personal_category"}.issubset(transaction_columns)
+
+
+def test_migrations_upgrade_existing_sqlite_database_missing_new_columns(tmp_path, monkeypatch):
+    db_path = tmp_path / "legacy.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE users (
+                id INTEGER NOT NULL,
+                username VARCHAR(50) NOT NULL,
+                display_name VARCHAR(100) NOT NULL,
+                hashed_password VARCHAR(255) NOT NULL,
+                created_at DATETIME,
+                PRIMARY KEY (id),
+                UNIQUE (username)
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE transactions (
+                id INTEGER NOT NULL,
+                transaction_date DATE NOT NULL,
+                description VARCHAR(255) NOT NULL,
+                amount_cents INTEGER NOT NULL,
+                transaction_type VARCHAR(10) NOT NULL,
+                classification VARCHAR(20),
+                statement_format VARCHAR(80),
+                source_hash VARCHAR(64) NOT NULL,
+                imported_at DATETIME,
+                updated_at DATETIME,
+                PRIMARY KEY (id),
+                CONSTRAINT uq_transactions_source_hash UNIQUE (source_hash)
+            )
+        """))
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{db_path}")
+
+    run_migrations()
+
+    inspector = inspect(engine)
+    transaction_columns = {column["name"] for column in inspector.get_columns("transactions")}
+    assert {"expensed", "personal_category"}.issubset(transaction_columns)
+    assert "alembic_version" in inspector.get_table_names()

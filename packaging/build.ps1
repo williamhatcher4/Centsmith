@@ -41,6 +41,9 @@ if (-not (Test-Path $Python)) {
     throw "Backend venv missing. Run ./start.ps1 once to bootstrap it, then re-run this script."
 }
 
+Step "0/4  Backend dependencies"
+& $Python -m pip install -e "$Backend[packaging]"
+
 Step "1/4  Frontend build (npm run build)"
 $NpmCmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
 if (-not $NpmCmd) { $NpmCmd = Get-Command npm -ErrorAction SilentlyContinue }

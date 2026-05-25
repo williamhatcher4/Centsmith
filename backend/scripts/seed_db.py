@@ -4,14 +4,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.config import settings
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal
+from app.migrations import run_migrations
 from app.models.user import User
 from app.models.transaction import Transaction  # noqa: F401
 from app.services.auth_service import hash_password
 
 
 def seed():
-    Base.metadata.create_all(bind=engine)
+    run_migrations()
 
     if settings.desktop_mode:
         print("Desktop mode: skipping admin seed; local user is provisioned on first request.")

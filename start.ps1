@@ -34,9 +34,16 @@ function Stop-ProjectServers {
   foreach ($p in $procs) { Kill-Pid -ProcessId ([int]$p.ProcessId) }
 }
 
+$InstallBackend = $false
 if (!(Test-Path $Python)) {
   py -3.10 -m venv (Join-Path $Backend ".venv")
   & $Python -m pip install --upgrade pip
+  $InstallBackend = $true
+} else {
+  & $Python -c "import alembic" 2>$null
+  if ($LASTEXITCODE -ne 0) { $InstallBackend = $true }
+}
+if ($InstallBackend) {
   & $Python -m pip install -e "$Backend[dev]"
 }
 

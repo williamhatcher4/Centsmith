@@ -1,4 +1,5 @@
 ﻿import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,8 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from app.config import settings
-from app.database import Base, engine
-from app.routers import auth, transactions
+from app.migrations import run_migrations
+from app.routers import auth, desktop, transactions
 
 
 def _frontend_dist_dir() -> Path:
@@ -17,19 +18,23 @@ def _frontend_dist_dir() -> Path:
         return bundle_root / "frontend" / "dist"
     return Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
-Base.metadata.create_all(bind=engine)
 
-if engine.dialect.name == "sqlite":
-    with engine.begin() as conn:
-        columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(transactions)").all()}
-        if "expensed" not in columns:
-            conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN expensed BOOLEAN NOT NULL DEFAULT 0")
-        if "personal_category" not in columns:
-            conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN personal_category VARCHAR(80)")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    run_migrations()
+    yield
 
-app = FastAPI(title="Credit Tracker", version="0.1.0")
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=settings.session_max_age, https_only=not settings.is_development, same_site="lax")
+
+app = FastAPI(title="Credit Tracker", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.secret_key,
+    max_age=settings.session_max_age,
+    https_only=not settings.is_development and not settings.desktop_mode,
+    same_site="lax",
+)
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.include_router(desktop.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 

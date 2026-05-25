@@ -46,3 +46,8 @@ def record_login_failure(username: str) -> None:
 def clear_login_failures(username: str) -> None:
     with _login_failures_lock:
         _login_failures.pop(username, None)
+
+
+def clear_all_login_failures() -> None:
+    with _login_failures_lock:
+        _login_failures.clear()

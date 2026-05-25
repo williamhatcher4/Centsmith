@@ -17,7 +17,6 @@ from app.schemas.transaction import (
     DashboardMonth,
     DashboardSummary,
     ImportPreview,
-    ImportPreviewRow,
     ImportResult,
     SpendingByCategory,
     SpendingPoint,
@@ -25,20 +24,16 @@ from app.schemas.transaction import (
     TransactionOut,
     TransactionUpdate,
 )
-from app.services.statement_import_service import parse_statement
+from app.services.transaction_import_service import (
+    confirm_import as confirm_statement_import,
+    preview_import as preview_statement_import,
+    read_limited_upload,
+)
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 INCOME_CATEGORIES = {"Income", "Reimbursement"}
 TRANSFER_CATEGORY = "Transfer"
-CARD_PAYMENT_DESCRIPTIONS = frozenset({"PAYMENT - THANK YOU", "PAYMENT RECEIVED - THANK YOU"})
-
-
-def _is_card_payment(row) -> bool:
-    return (
-        row.transaction_type == "credit"
-        and row.description.strip().upper() in CARD_PAYMENT_DESCRIPTIONS
-    )
 
 
 def _base_query(db: Session):
@@ -114,41 +109,11 @@ async def preview_import(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if file.size and file.size > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
-    raw = await file.read()
     try:
-        rows, fmt, skipped_errors = parse_statement(file.filename or "statement.csv", raw)
+        raw = await read_limited_upload(file)
+        return preview_statement_import(db, raw, file.filename or "statement.csv", "card")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    spending_rows = [row for row in rows if not _is_card_payment(row)]
-    ignored_credits = len(rows) - len(spending_rows)
-    hashes = [row.source_hash for row in spending_rows]
-    existing = set()
-    if hashes:
-        existing = {h for (h,) in db.query(Transaction.source_hash).filter(Transaction.source_hash.in_(hashes)).all()}
-    preview_rows = [
-        ImportPreviewRow(
-            row_number=row.row_number,
-            date=row.transaction_date,
-            description=row.description,
-            amount_cents=row.amount_cents,
-            transaction_type=row.transaction_type,
-            is_duplicate=row.source_hash in existing,
-        )
-        for row in spending_rows
-    ]
-    duplicates = sum(1 for row in preview_rows if row.is_duplicate)
-    return ImportPreview(
-        rows=preview_rows,
-        total=len(rows),
-        duplicates=duplicates,
-        ignored_credits=ignored_credits,
-        to_import=len(preview_rows) - duplicates,
-        statement_format=fmt,
-        skipped_errors=skipped_errors,
-    )
 
 
 @router.post("/import/confirm", response_model=ImportResult)
@@ -157,40 +122,11 @@ async def confirm_import(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if file.size and file.size > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
-    raw = await file.read()
     try:
-        rows, fmt, skipped_errors = parse_statement(file.filename or "statement.csv", raw)
+        raw = await read_limited_upload(file)
+        return confirm_statement_import(db, raw, file.filename or "statement.csv", "card")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    imported = skipped = 0
-    spending_rows = [row for row in rows if not _is_card_payment(row)]
-    ignored_credits = len(rows) - len(spending_rows)
-    hashes = [row.source_hash for row in spending_rows]
-    existing = set()
-    if hashes:
-        existing = {h for (h,) in db.query(Transaction.source_hash).filter(Transaction.source_hash.in_(hashes)).all()}
-
-    for row in spending_rows:
-        if row.source_hash in existing:
-            skipped += 1
-            continue
-        db.add(Transaction(
-            transaction_date=row.transaction_date,
-            description=row.description,
-            amount_cents=row.amount_cents,
-            transaction_type=row.transaction_type,
-            classification=None,
-            expensed=False,
-            statement_format=fmt,
-            source_hash=row.source_hash,
-        ))
-        existing.add(row.source_hash)
-        imported += 1
-    db.commit()
-    return ImportResult(imported=imported, skipped=skipped, ignored_credits=ignored_credits, skipped_errors=skipped_errors)
 
 
 @router.post("/import/checking/preview", response_model=ImportPreview)
@@ -199,39 +135,11 @@ async def preview_checking_import(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if file.size and file.size > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
-    raw = await file.read()
     try:
-        rows, fmt, skipped_errors = parse_statement(file.filename or "checking.csv", raw, source="checking")
+        raw = await read_limited_upload(file)
+        return preview_statement_import(db, raw, file.filename or "checking.csv", "checking")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    hashes = [row.source_hash for row in rows]
-    existing = set()
-    if hashes:
-        existing = {h for (h,) in db.query(Transaction.source_hash).filter(Transaction.source_hash.in_(hashes)).all()}
-    preview_rows = [
-        ImportPreviewRow(
-            row_number=row.row_number,
-            date=row.transaction_date,
-            description=row.description,
-            amount_cents=row.amount_cents,
-            transaction_type=row.transaction_type,
-            is_duplicate=row.source_hash in existing,
-        )
-        for row in rows
-    ]
-    duplicates = sum(1 for row in preview_rows if row.is_duplicate)
-    return ImportPreview(
-        rows=preview_rows,
-        total=len(rows),
-        duplicates=duplicates,
-        ignored_credits=0,
-        to_import=len(preview_rows) - duplicates,
-        statement_format=fmt,
-        skipped_errors=skipped_errors,
-    )
 
 
 @router.post("/import/checking/confirm", response_model=ImportResult)
@@ -240,38 +148,11 @@ async def confirm_checking_import(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if file.size and file.size > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
-    raw = await file.read()
     try:
-        rows, fmt, skipped_errors = parse_statement(file.filename or "checking.csv", raw, source="checking")
+        raw = await read_limited_upload(file)
+        return confirm_statement_import(db, raw, file.filename or "checking.csv", "checking")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    imported = skipped = 0
-    hashes = [row.source_hash for row in rows]
-    existing = set()
-    if hashes:
-        existing = {h for (h,) in db.query(Transaction.source_hash).filter(Transaction.source_hash.in_(hashes)).all()}
-
-    for row in rows:
-        if row.source_hash in existing:
-            skipped += 1
-            continue
-        db.add(Transaction(
-            transaction_date=row.transaction_date,
-            description=row.description,
-            amount_cents=row.amount_cents,
-            transaction_type=row.transaction_type,
-            classification="personal",
-            expensed=False,
-            statement_format=fmt,
-            source_hash=row.source_hash,
-        ))
-        existing.add(row.source_hash)
-        imported += 1
-    db.commit()
-    return ImportResult(imported=imported, skipped=skipped, ignored_credits=0, skipped_errors=skipped_errors)
 
 
 @router.post("/bulk-classify", response_model=BulkClassifyResult)

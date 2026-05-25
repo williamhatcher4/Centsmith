@@ -7,14 +7,24 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use serde::Deserialize;
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent};
 
 struct BackendProcess(Mutex<Option<Child>>);
+struct DesktopToken(Mutex<Option<String>>);
 
 const BACKEND_DIR_NAME: &str = "backend";
 const BACKEND_EXE_NAME: &str = "credit-tracker-backend.exe";
-const PORT_FILE_NAME: &str = "port.txt";
+const RUNTIME_FILE_NAME: &str = "runtime.json";
+const BOOTSTRAP_PATH: &str = "/desktop-bootstrap";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+
+#[derive(Deserialize)]
+struct RuntimeMetadata {
+    port: u16,
+    token: String,
+}
 
 fn user_data_dir() -> PathBuf {
     let base = env::var_os("APPDATA")
@@ -38,11 +48,14 @@ fn debug_log(msg: &str) {
         .create(true)
         .append(true)
         .open(&path)
-        .and_then(|mut f| { use std::io::Write; f.write_all(line.as_bytes()) });
+        .and_then(|mut f| {
+            use std::io::Write;
+            f.write_all(line.as_bytes())
+        });
 }
 
 fn chrono_now() -> String {
-    // Simple timestamp without pulling in chrono — good enough for debugging.
+    // Simple timestamp without pulling in chrono; good enough for debugging.
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| format!("{}s", d.as_secs()))
@@ -58,15 +71,26 @@ fn resolve_backend_exe(app: &AppHandle) -> Result<PathBuf, String> {
 
     // NSIS places resources at their source path relative to the tauri project dir,
     // so "resources/backend/**" lands at <install_dir>/resources/backend/.
-    let nsis = resource_dir.join("resources").join(BACKEND_DIR_NAME).join(BACKEND_EXE_NAME);
-    debug_log(&format!("nsis candidate = {} exists={}", nsis.display(), nsis.is_file()));
+    let nsis = resource_dir
+        .join("resources")
+        .join(BACKEND_DIR_NAME)
+        .join(BACKEND_EXE_NAME);
+    debug_log(&format!(
+        "nsis candidate = {} exists={}",
+        nsis.display(),
+        nsis.is_file()
+    ));
     if nsis.is_file() {
         return Ok(nsis);
     }
 
     // Fallback: resource_dir already points into the resources subdir (dev mode).
     let candidate = resource_dir.join(BACKEND_DIR_NAME).join(BACKEND_EXE_NAME);
-    debug_log(&format!("candidate = {} exists={}", candidate.display(), candidate.is_file()));
+    debug_log(&format!(
+        "candidate = {} exists={}",
+        candidate.display(),
+        candidate.is_file()
+    ));
     if candidate.is_file() {
         return Ok(candidate);
     }
@@ -75,7 +99,11 @@ fn resolve_backend_exe(app: &AppHandle) -> Result<PathBuf, String> {
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../packaging/dist/credit-tracker-backend")
         .join(BACKEND_EXE_NAME);
-    debug_log(&format!("dev fallback = {} exists={}", dev.display(), dev.is_file()));
+    debug_log(&format!(
+        "dev fallback = {} exists={}",
+        dev.display(),
+        dev.is_file()
+    ));
     if dev.is_file() {
         return Ok(dev);
     }
@@ -90,10 +118,10 @@ fn resolve_backend_exe(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn spawn_backend(app: &AppHandle) -> Result<Child, String> {
     let exe = resolve_backend_exe(app)?;
-    // Remove stale port.txt before spawning so read_port always waits for a
-    // freshly written file from the current backend instance.
-    let port_file = user_data_dir().join(PORT_FILE_NAME);
-    let _ = fs::remove_file(&port_file);
+    // Remove stale runtime metadata before spawning so we wait for fresh data
+    // from the current backend instance.
+    let runtime_file = user_data_dir().join(RUNTIME_FILE_NAME);
+    let _ = fs::remove_file(&runtime_file);
     debug_log(&format!("spawning backend: {}", exe.display()));
     Command::new(&exe)
         .stdout(Stdio::null())
@@ -102,17 +130,21 @@ fn spawn_backend(app: &AppHandle) -> Result<Child, String> {
         .map_err(|e| format!("failed to spawn backend: {e}"))
 }
 
-fn read_port(timeout: Duration) -> Result<u16, String> {
-    let port_file = user_data_dir().join(PORT_FILE_NAME);
+fn read_runtime_metadata(timeout: Duration) -> Result<RuntimeMetadata, String> {
+    let runtime_file = user_data_dir().join(RUNTIME_FILE_NAME);
     let deadline = Instant::now() + timeout;
     loop {
-        if let Ok(contents) = fs::read_to_string(&port_file) {
-            if let Ok(port) = contents.trim().parse::<u16>() {
-                return Ok(port);
+        if let Ok(contents) = fs::read_to_string(&runtime_file) {
+            match serde_json::from_str::<RuntimeMetadata>(&contents) {
+                Ok(metadata) => {
+                    let _ = fs::remove_file(&runtime_file);
+                    return Ok(metadata);
+                }
+                Err(e) => debug_log(&format!("runtime metadata parse error: {e}")),
             }
         }
         if Instant::now() >= deadline {
-            return Err(format!("timed out waiting for {}", port_file.display()));
+            return Err(format!("timed out waiting for {}", runtime_file.display()));
         }
         thread::sleep(Duration::from_millis(100));
     }
@@ -134,35 +166,46 @@ fn navigate_to_backend(app: AppHandle) {
     thread::spawn(move || {
         debug_log("navigate thread started");
 
-        let port = match read_port(STARTUP_TIMEOUT) {
-            Ok(p) => { debug_log(&format!("read port: {p}")); p }
-            Err(e) => { debug_log(&format!("read_port error: {e}")); return; }
+        let metadata = match read_runtime_metadata(STARTUP_TIMEOUT) {
+            Ok(value) => {
+                debug_log(&format!("read runtime metadata for port {}", value.port));
+                value
+            }
+            Err(e) => {
+                debug_log(&format!("read_runtime_metadata error: {e}"));
+                return;
+            }
         };
 
-        if let Err(e) = wait_for_port_open(port, STARTUP_TIMEOUT) {
+        if let Err(e) = wait_for_port_open(metadata.port, STARTUP_TIMEOUT) {
             debug_log(&format!("wait_for_port error: {e}"));
             return;
         }
-        debug_log(&format!("port {port} is open"));
+        debug_log(&format!("port {} is open", metadata.port));
 
-        let url = format!("http://127.0.0.1:{port}/");
+        // Stash the token before navigation so the on_page_load handler can
+        // inject it into the bootstrap page via eval(), keeping it out of the
+        // URL (and out of any URL-based logs / nav history).
+        app.state::<DesktopToken>()
+            .0
+            .lock()
+            .unwrap()
+            .replace(metadata.token);
+
+        let url = format!("http://127.0.0.1:{}{}", metadata.port, BOOTSTRAP_PATH);
 
         match app.get_webview_window("main") {
             None => debug_log("get_webview_window returned None"),
             Some(window) => {
-                debug_log(&format!("got window, calling eval to navigate to {url}"));
-                // Use JS eval rather than window.navigate() to avoid WebView2
-                // blocking cross-scheme navigation from tauri:// to http://.
-                let js = format!("window.location.replace({url:?})");
-                match window.eval(&js) {
-                    Ok(_) => debug_log("eval succeeded"),
+                debug_log(&format!(
+                    "got window, navigating to backend on port {}",
+                    metadata.port
+                ));
+                let parsed = url.parse().expect("valid url");
+                match window.navigate(parsed) {
+                    Ok(_) => debug_log("navigate() succeeded"),
                     Err(e) => {
-                        debug_log(&format!("eval failed: {e}, trying navigate()"));
-                        let parsed = url.parse().expect("valid url");
-                        match window.navigate(parsed) {
-                            Ok(_) => debug_log("navigate() succeeded"),
-                            Err(e2) => debug_log(&format!("navigate() also failed: {e2}")),
-                        }
+                        debug_log(&format!("navigate() failed: {e}"));
                     }
                 }
             }
@@ -181,6 +224,46 @@ pub fn run() {
             }
         }))
         .manage(BackendProcess(Mutex::new(None)))
+        .manage(DesktopToken(Mutex::new(None)))
+        .on_page_load(|webview, payload| {
+            if payload.event() != PageLoadEvent::Finished {
+                return;
+            }
+            if payload.url().path() != BOOTSTRAP_PATH {
+                return;
+            }
+            let token = webview
+                .app_handle()
+                .state::<DesktopToken>()
+                .0
+                .lock()
+                .unwrap()
+                .take();
+            let Some(token) = token else {
+                debug_log("on_page_load: bootstrap loaded but no token available");
+                return;
+            };
+            let token_json =
+                serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".to_string());
+            let script = format!(
+                "(async () => {{ \
+                    const resp = await fetch('/desktop-login', {{ \
+                        method: 'POST', \
+                        headers: {{'Content-Type': 'application/x-www-form-urlencoded'}}, \
+                        body: new URLSearchParams({{token: {token}}}).toString() \
+                    }}); \
+                    if (resp.ok) {{ window.location.replace('/'); }} \
+                    else {{ const s = document.getElementById('status'); \
+                        if (s) s.textContent = 'Desktop login failed: ' + resp.status; }} \
+                }})();",
+                token = token_json,
+            );
+            if let Err(e) = webview.eval(&script) {
+                debug_log(&format!("eval failed: {e}"));
+            } else {
+                debug_log("bootstrap login script evaluated");
+            }
+        })
         .setup(|app| {
             debug_log("setup() called");
             let child = spawn_backend(&app.handle()).map_err(|e| {

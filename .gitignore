@@ -4,21 +4,38 @@ __pycache__/
 *.pyo
 *.egg-info/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Backend
 backend/.venv/
 backend/.env
+backend/.env.*
+!backend/.env.example
 
 # Local database
 /credit_tracker.db
+*.sqlite
+*.sqlite3
 *.db-journal
+*.db-shm
+*.db-wal
+
+# Runtime logs and local metadata
+*.log
+*.pid
+runtime.json
 
 # Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.env
+frontend/.env.*
 
-# Packaging — build artifacts, never source
+# Packaging - build artifacts, never source
 packaging/build/
 packaging/dist/
 
@@ -34,6 +51,10 @@ Thumbs.db
 .vscode/
 .idea/
 .vs/
+
+# Local assistant/debug workspace files
+.claude/
+DEBUG.md
 
 # Loose data files dropped in the repo root (statements, exports, etc.)
 /*.csv
