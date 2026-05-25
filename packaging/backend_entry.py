@@ -1,6 +1,6 @@
-"""PyInstaller entry point for the Credit Tracker backend sidecar.
+"""PyInstaller entry point for the Centsmith backend sidecar.
 
-Picks a free port, writes runtime metadata to %APPDATA%\\CreditTracker so the
+Picks a free port, writes runtime metadata to %APPDATA%\\Centsmith so the
 Tauri shell can discover it, then launches uvicorn against ``app.main:app``.
 
 This module is the value of ``backend.spec``'s ``Analysis(...)`` first arg, so
@@ -30,7 +30,7 @@ def _user_data_dir() -> Path:
         base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    target = base / "CreditTracker"
+    target = base / "Centsmith"
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -47,7 +47,7 @@ def main() -> None:
     os.environ.setdefault("DESKTOP_MODE", "1")
     os.environ.setdefault("ENVIRONMENT", "production")
 
-    port_override = os.environ.get("CREDIT_TRACKER_PORT")
+    port_override = os.environ.get("CENTSMITH_PORT")
     port = int(port_override) if port_override else _pick_free_port()
     token = secrets.token_urlsafe(32)
     os.environ["DESKTOP_AUTH_TOKEN"] = token

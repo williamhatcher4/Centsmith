@@ -34,7 +34,7 @@ export function LoginPage() {
         <div className="mb-6 flex items-center gap-3">
           <span className="flex size-11 items-center justify-center rounded-[8px] bg-[var(--accent-soft)] text-[var(--accent)]"><CreditCard className="size-6" /></span>
           <div>
-            <h1 className="text-xl font-bold text-[var(--text)]">Credit Tracker</h1>
+            <h1 className="text-xl font-bold text-[var(--text)]">Centsmith</h1>
             <p className="text-sm text-[var(--text-subtle)]">Sign in to sort statement activity.</p>
           </div>
         </div>

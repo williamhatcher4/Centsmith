@@ -1,4 +1,4 @@
-# Credit Tracker
+# Centsmith
 
 A small local app for importing credit card statements, sorting transactions into Personal or Work, reviewing spending, and exporting each group separately.
 
@@ -8,7 +8,7 @@ The app runs entirely on your own computer. Your data never leaves your machine.
 
 ## Using the desktop app
 
-The desktop app is the simplest way to run Credit Tracker. You just install it like any other Windows program — no Python, Node.js, or command-line setup needed.
+The desktop app is the simplest way to run Centsmith. You just install it like any other Windows program — no Python, Node.js, or command-line setup needed.
 
 ### What you'll need
 
@@ -17,10 +17,10 @@ The desktop app is the simplest way to run Credit Tracker. You just install it l
 
 ### Installing
 
-1. Download the latest `CreditTracker-Setup-x.x.x.exe` installer.
+1. Download the latest `Centsmith-Setup-x.x.x.exe` installer.
 2. Double-click it and click through the wizard. The defaults are all fine.
-3. When it finishes, a **Credit Tracker** shortcut will be on your desktop and in your Start Menu.
-4. Double-click the shortcut to launch the app. The first launch takes a few seconds while the local server starts — you'll see a "Starting Credit Tracker…" screen while it loads.
+3. When it finishes, a **Centsmith** shortcut will be on your desktop and in your Start Menu.
+4. Double-click the shortcut to launch the app. The first launch takes a few seconds while the local server starts — you'll see a "Starting Centsmith…" screen while it loads.
 
 That's it. No login required.
 
@@ -29,35 +29,35 @@ That's it. No login required.
 The desktop app stores your database at:
 
 ```
-C:\Users\<your name>\AppData\Roaming\CreditTracker\credit_tracker.db
+C:\Users\<your name>\AppData\Roaming\Centsmith\centsmith.db
 ```
 
 To find it quickly in File Explorer, paste this into the address bar:
 
 ```
-%APPDATA%\CreditTracker
+%APPDATA%\Centsmith
 ```
 
 **Back this folder up regularly** — copy it to OneDrive, an external drive, or anywhere you keep important files.
 
 ### Moving data from the developer version
 
-If you were previously running Credit Tracker via `start.ps1` and have existing transaction data, you can carry it over:
+If you were previously running Centsmith via `start.ps1` and have existing transaction data, you can carry it over:
 
 1. Close both the developer app (the two PowerShell windows) and the desktop app if either is running.
 2. Open PowerShell and run:
 
    ```powershell
-   Copy-Item "$env:USERPROFILE\OneDrive\Documents\Projects\credit_tracker\credit_tracker.db" `
-             "$env:APPDATA\CreditTracker\credit_tracker.db"
+   Copy-Item "$env:USERPROFILE\OneDrive\Documents\Projects\centsmith\centsmith.db" `
+             "$env:APPDATA\Centsmith\centsmith.db"
    ```
 
-   Adjust the source path to wherever your `credit_tracker` project folder is.
+   Adjust the source path to wherever your `centsmith` project folder is.
 3. Launch the desktop app — all your transactions will be there.
 
 ### Uninstalling
 
-Open **Settings → Apps**, search for Credit Tracker, and click **Uninstall**. Your data in `%APPDATA%\CreditTracker\` is preserved — delete that folder manually if you want to remove it too.
+Open **Settings → Apps**, search for Centsmith, and click **Uninstall**. Your data in `%APPDATA%\Centsmith\` is preserved — delete that folder manually if you want to remove it too.
 
 ---
 
@@ -112,7 +112,7 @@ Node.js builds the part of the app you see in the browser.
 **Option B — Git**
 
 ```powershell
-git clone <repository-url> credit_tracker
+git clone <repository-url> centsmith
 ```
 
 ### First-time setup
@@ -132,7 +132,7 @@ You need to set a username and password for the login screen.
 
 ### Running the app
 
-1. Open the `credit_tracker` folder in File Explorer.
+1. Open the `centsmith` folder in File Explorer.
 2. Right-click `start.ps1` → **Run with PowerShell**.
 3. The first run takes a few minutes to download dependencies and build the frontend. Subsequent runs are quick.
 4. When ready, open your browser to <http://localhost:5175> and log in.
@@ -141,13 +141,13 @@ To stop the app, close the two PowerShell windows that opened.
 
 ### Where your data lives (developer mode)
 
-Your database is `credit_tracker.db` in the project folder. Back it up by copying it somewhere safe.
+Your database is `centsmith.db` in the project folder. Back it up by copying it somewhere safe.
 
 ---
 
 ## Building the desktop installer
 
-This section is for creating a new `CreditTracker-Setup-x.x.x.exe` to distribute.
+This section is for creating a new `Centsmith-Setup-x.x.x.exe` to distribute.
 
 ### Prerequisites (one-time)
 
@@ -187,7 +187,7 @@ This runs the full pipeline:
 2. Packages the Python backend with PyInstaller
 3. Copies the backend bundle into the Tauri shell
 4. Compiles the Tauri shell (`cargo tauri build`)
-5. Produces `packaging\dist\CreditTracker-Setup-x.x.x.exe` with Inno Setup
+5. Produces `packaging\dist\Centsmith-Setup-x.x.x.exe` with Inno Setup
 
 The first build takes 10–15 minutes (Cargo compiles all Tauri dependencies from scratch). Subsequent builds are much faster.
 
@@ -213,13 +213,13 @@ which aborts the build if any `.env`, `.pfx`, `.p12`, `.pem`, or `.key` file
 ### Publishing signed auto-updates
 
 The release workflow publishes signed updater artifacts to the public
-`williamhatcher4/credit_tracker_releases` repo while keeping this source repo
+`williamhatcher4/centsmith_releases` repo while keeping this source repo
 private. Before running `.github/workflows/release.yml`, add these secrets to
 the private source repo:
 
 - `PUBLIC_RELEASES_TOKEN` - fine-grained token with contents write access to
-  `williamhatcher4/credit_tracker_releases`
-- `TAURI_SIGNING_PRIVATE_KEY` - contents of `packaging\credit-tracker-updater.key`
+  `williamhatcher4/centsmith_releases`
+- `TAURI_SIGNING_PRIVATE_KEY` - contents of `packaging\centsmith-updater.key`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` - blank if the generated key has no password
 - `WINDOWS_CERTIFICATE_BASE64` - base64 encoded `.pfx` code-signing certificate
 - `WINDOWS_CERTIFICATE_PASSWORD` - `.pfx` password
@@ -235,7 +235,7 @@ Keep the private updater key and Windows signing certificate out of git.
 
 **The app opens a loading screen and never gets past it**
 
-The local server is taking longer than expected to start. Wait up to 30 seconds. If it still doesn't load, check whether a previous instance is still running: open Task Manager and look for `credit-tracker-backend.exe`. If you see one, end it, then try launching again.
+The local server is taking longer than expected to start. Wait up to 30 seconds. If it still doesn't load, check whether a previous instance is still running: open Task Manager and look for `centsmith-backend.exe`. If you see one, end it, then try launching again.
 
 **"Windows protected your PC" / SmartScreen warning**
 
@@ -246,7 +246,7 @@ The installer isn't code-signed. Click **More info → Run anyway**. This is exp
 Check the shell log:
 
 ```powershell
-Get-Content "$env:APPDATA\CreditTracker\shell.log"
+Get-Content "$env:APPDATA\Centsmith\shell.log"
 ```
 
 ### Developer mode
@@ -273,7 +273,7 @@ The servers are still starting. Wait 5–10 seconds and refresh. If the PowerShe
 
 **I forgot my password**
 
-Close the app, delete `credit_tracker.db`, edit `backend\.env` with new credentials, and run `start.ps1` again. This wipes your transaction data — back up the `.db` file first if you want to keep it.
+Close the app, delete `centsmith.db`, edit `backend\.env` with new credentials, and run `start.ps1` again. This wipes your transaction data — back up the `.db` file first if you want to keep it.
 
 **Port 8012 or 5175 already in use**
 

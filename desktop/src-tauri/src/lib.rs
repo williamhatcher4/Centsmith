@@ -19,7 +19,7 @@ struct BackendProcess(Mutex<Option<Child>>);
 struct DesktopToken(Mutex<Option<String>>);
 
 const BACKEND_DIR_NAME: &str = "backend";
-const BACKEND_EXE_NAME: &str = "credit-tracker-backend.exe";
+const BACKEND_EXE_NAME: &str = "centsmith-backend.exe";
 const RUNTIME_FILE_NAME: &str = "runtime.json";
 const BOOTSTRAP_PATH: &str = "/desktop-bootstrap";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -34,7 +34,7 @@ fn user_data_dir() -> PathBuf {
     let base = env::var_os("APPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| dirs_home().join("AppData").join("Roaming"));
-    let dir = base.join("CreditTracker");
+    let dir = base.join("Centsmith");
     let _ = fs::create_dir_all(&dir);
     dir
 }
@@ -101,7 +101,7 @@ fn resolve_backend_exe(app: &AppHandle) -> Result<PathBuf, String> {
 
     // Dev fallback: repo-relative built backend.
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../packaging/dist/credit-tracker-backend")
+        .join("../../packaging/dist/centsmith-backend")
         .join(BACKEND_EXE_NAME);
     debug_log(&format!(
         "dev fallback = {} exists={}",
@@ -251,7 +251,7 @@ async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
     let should_install = app
         .dialog()
         .message(format!(
-            "Credit Tracker {} is available. Install it now?",
+            "Centsmith {} is available. Install it now?",
             update.version
         ))
         .title("Update available")

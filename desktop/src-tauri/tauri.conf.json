@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Credit Tracker",
+  "productName": "Centsmith",
   "version": "0.1.0",
-  "identifier": "com.williamhatcher.credittracker",
+  "identifier": "com.williamhatcher.centsmith",
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Credit Tracker",
+        "title": "Centsmith",
         "width": 1280,
         "height": 800,
         "minWidth": 960,
@@ -50,7 +50,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZBMjFEMDY1MjEyRjcwMjAKUldRZ2NDOGhaZEFoK3NNWDk5QVZ6ZTNTSnFiU2xpdmZQZGlJOXRnWkRRQ3dpZTRaOVRVeng5ei8K",
       "endpoints": [
-        "https://github.com/williamhatcher4/credit_tracker_releases/releases/latest/download/latest.json"
+        "https://github.com/williamhatcher4/centsmith_releases/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

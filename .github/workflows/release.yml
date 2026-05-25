@@ -17,7 +17,7 @@ permissions:
 env:
   RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
   PUBLIC_RELEASE_OWNER: williamhatcher4
-  PUBLIC_RELEASE_REPO: credit_tracker_releases
+  PUBLIC_RELEASE_REPO: centsmith_releases
 
 jobs:
   release-windows:
@@ -81,7 +81,7 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
             throw "WINDOWS_CERTIFICATE_BASE64 secret is required."
           }
-          $certPath = Join-Path $env:RUNNER_TEMP "credit-tracker-code-signing.pfx"
+          $certPath = Join-Path $env:RUNNER_TEMP "centsmith-code-signing.pfx"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
           "WINDOWS_CERTIFICATE_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CI_RELEASE_SIGNING_REQUIRED=1" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -119,7 +119,7 @@ jobs:
           repo: ${{ env.PUBLIC_RELEASE_REPO }}
           releaseCommitish: main
           tagName: ${{ env.RELEASE_TAG }}
-          releaseName: "Credit Tracker ${{ env.RELEASE_TAG }}"
+          releaseName: "Centsmith ${{ env.RELEASE_TAG }}"
           releaseDraft: false
           prerelease: false
           generateReleaseNotes: true

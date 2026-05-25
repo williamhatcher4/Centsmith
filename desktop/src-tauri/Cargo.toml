@@ -1,13 +1,13 @@
 [package]
-name = "credit-tracker"
+name = "centsmith"
 version = "0.1.0"
-description = "Credit Tracker desktop"
+description = "Centsmith desktop"
 authors = ["William Hatcher"]
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "credit_tracker_lib"
+name = "centsmith_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -1,4 +1,4 @@
-# Credit Tracker — Desktop Shell
+# Centsmith — Desktop Shell
 
 Native Windows app shell built with Tauri 2. Wraps the FastAPI backend (packaged
 as a PyInstaller sidecar) in a WebView2 window so users get a real desktop app
@@ -38,7 +38,7 @@ desktop/
 The Tauri shell never bundles the React app directly — the PyInstaller sidecar
 serves both the API and the static `frontend/dist` on `http://127.0.0.1:<port>`.
 On launch, Tauri shows `loader/index.html`, then once the sidecar writes
-`%APPDATA%\CreditTracker\runtime.json`, Tauri reads the local port plus a
+`%APPDATA%\Centsmith\runtime.json`, Tauri reads the local port plus a
 one-time desktop login token and navigates the WebView to the authenticated
 local URL.
 

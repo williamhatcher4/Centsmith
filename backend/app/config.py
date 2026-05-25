@@ -16,15 +16,15 @@ def _user_data_dir() -> Path:
         base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    target = base / "CreditTracker"
+    target = base / "Centsmith"
     target.mkdir(parents=True, exist_ok=True)
     return target
 
 
 def _default_database_url() -> str:
     if _is_frozen():
-        return f"sqlite:///{_user_data_dir() / 'credit_tracker.db'}"
-    return f"sqlite:///{Path(__file__).resolve().parents[2] / 'credit_tracker.db'}"
+        return f"sqlite:///{_user_data_dir() / 'centsmith.db'}"
+    return f"sqlite:///{Path(__file__).resolve().parents[2] / 'centsmith.db'}"
 
 
 def _default_environment() -> str:
@@ -97,7 +97,7 @@ def _write_exclusive(path: Path, data: bytes) -> bool:
 
 def _default_secret_key() -> str:
     if not _is_frozen():
-        return "dev-credit-tracker-change-me"
+        return "dev-centsmith-change-me"
 
     data_dir = _user_data_dir()
 
@@ -118,7 +118,7 @@ def _default_secret_key() -> str:
                 # corrupted blob. Rotate rather than refusing to start;
                 # any active sessions are invalidated.
                 sys.stderr.write(
-                    "credit-tracker: secret.key.dpapi could not be decrypted; rotating key\n"
+                    "centsmith: secret.key.dpapi could not be decrypted; rotating key\n"
                 )
                 try:
                     encrypted_path.unlink()

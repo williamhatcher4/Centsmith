@@ -10,7 +10,7 @@ router = APIRouter(tags=["desktop"])
 
 
 _BOOTSTRAP_HTML = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Credit Tracker</title>
+<html lang="en"><head><meta charset="utf-8"><title>Centsmith</title>
 <style>body{font-family:system-ui,sans-serif;margin:2rem;color:#444}</style></head>
 <body><p id="status">Signing you in...</p></body></html>
 """

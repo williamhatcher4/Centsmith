@@ -1,8 +1,8 @@
-# Builds the full Credit Tracker Windows installer.
+# Builds the full Centsmith Windows installer.
 #
 # Pipeline:
 #   1. npm run build                       -> frontend/dist
-#   2. pyinstaller packaging/backend.spec  -> packaging/dist/credit-tracker-backend/
+#   2. pyinstaller packaging/backend.spec  -> packaging/dist/centsmith-backend/
 #      optional: -ObfuscateBackend routes this through PyArmor for release builds
 #   3. copy backend bundle into            -> desktop/src-tauri/resources/backend/
 #   4. cargo tauri build                   -> desktop/src-tauri/target/release/bundle/nsis/
@@ -33,7 +33,7 @@ $Packaging = Join-Path $Root "packaging"
 $Desktop = Join-Path $Root "desktop"
 $Python = Join-Path $Backend ".venv\Scripts\python.exe"
 $PyArmor = Join-Path $Backend ".venv\Scripts\pyarmor.exe"
-$BackendOut = Join-Path $Packaging "dist\credit-tracker-backend"
+$BackendOut = Join-Path $Packaging "dist\centsmith-backend"
 $ResourceTarget = Join-Path $Desktop "src-tauri\resources\backend"
 
 function Step([string]$Message) {

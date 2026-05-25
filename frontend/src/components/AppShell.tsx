@@ -16,7 +16,7 @@ const links: { to: string; label: string; icon: LucideIcon }[] = [
 ]
 
 function BrandMark() {
-  return <span className="flex size-8 items-center justify-center rounded-[8px] bg-[var(--accent)] text-sm font-black text-white">CT</span>
+  return <span className="flex size-8 items-center justify-center rounded-[8px] bg-[var(--accent)] text-sm font-black text-white">CS</span>
 }
 
 export function AppShell() {
@@ -35,7 +35,7 @@ export function AppShell() {
         <div className="px-5 pb-5 pt-6">
           <div className="flex items-center gap-2.5">
             <BrandMark />
-            <span className="text-base font-bold text-[var(--text)]">Credit Tracker</span>
+            <span className="text-base font-bold text-[var(--text)]">Centsmith</span>
           </div>
         </div>
         <nav className="flex-1 px-3" aria-label="Primary">
@@ -66,7 +66,7 @@ export function AppShell() {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 backdrop-blur-xl md:hidden">
-          <div className="flex items-center gap-2.5"><BrandMark /><span className="font-bold">Credit Tracker</span></div>
+          <div className="flex items-center gap-2.5"><BrandMark /><span className="font-bold">Centsmith</span></div>
           <ThemeToggle size="sm" />
         </header>
         <main className="flex-1 px-4 py-6 md:px-8 lg:px-10">

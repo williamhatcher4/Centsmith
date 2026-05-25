@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for the Credit Tracker backend sidecar.
+"""PyInstaller spec for the Centsmith backend sidecar.
 
 Build from the repo root with the backend venv active:
 
     pyinstaller packaging/backend.spec
 
-Output: packaging/dist/credit-tracker-backend/credit-tracker-backend.exe
+Output: packaging/dist/centsmith-backend/centsmith-backend.exe
 Bundles app/ + frontend/dist/ so the running exe self-serves the static UI.
 """
 import sys
@@ -77,7 +77,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="credit-tracker-backend",
+    name="centsmith-backend",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -94,5 +94,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="credit-tracker-backend",
+    name="centsmith-backend",
 )

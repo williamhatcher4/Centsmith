@@ -1,8 +1,8 @@
-# Credit Tracker Project Overview
+# Centsmith Project Overview
 
 ## Goal
 
-Credit Tracker is a local personal finance app for importing credit card and checking activity, sorting transactions, tracking work expenses, and analyzing personal spending.
+Centsmith is a local personal finance app for importing credit card and checking activity, sorting transactions, tracking work expenses, and analyzing personal spending.
 
 The main workflow is intentionally staged:
 
@@ -31,7 +31,7 @@ Runtime flow:
 
 1. `packaging/backend_entry.py` chooses a free port.
 2. The sidecar generates a per-run token and sets `DESKTOP_AUTH_TOKEN`.
-3. The sidecar writes `%APPDATA%\CreditTracker\runtime.json` containing only `{ port, token }`.
+3. The sidecar writes `%APPDATA%\Centsmith\runtime.json` containing only `{ port, token }`.
 4. `desktop/src-tauri/src/lib.rs` reads and deletes `runtime.json`.
 5. Tauri navigates to `GET /desktop-login?token=...`.
 6. The backend validates and consumes the token, provisions or loads the local user, sets the signed session cookie, and redirects to `/`.
@@ -39,10 +39,10 @@ Runtime flow:
 
 Desktop data and logs:
 
-- Database: `%APPDATA%\CreditTracker\credit_tracker.db`.
-- Shell debug log: `%APPDATA%\CreditTracker\shell.log`.
-- Runtime metadata: `%APPDATA%\CreditTracker\runtime.json`, short-lived and deleted after launch.
-- Session-signing key: `%APPDATA%\CreditTracker\secret.key.dpapi`, DPAPI-encrypted under the current Windows user. Legacy plaintext `secret.key` files are migrated and deleted on first run.
+- Database: `%APPDATA%\Centsmith\centsmith.db`.
+- Shell debug log: `%APPDATA%\Centsmith\shell.log`.
+- Runtime metadata: `%APPDATA%\Centsmith\runtime.json`, short-lived and deleted after launch.
+- Session-signing key: `%APPDATA%\Centsmith\secret.key.dpapi`, DPAPI-encrypted under the current Windows user. Legacy plaintext `secret.key` files are migrated and deleted on first run.
 
 Build the installer from the repo root:
 
@@ -66,7 +66,7 @@ The script creates or reuses the backend virtual environment, installs backend d
 
 Developer database:
 
-- `credit_tracker.db` in the repo root.
+- `centsmith.db` in the repo root.
 
 Login credentials are set on first run via `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `backend/.env`. See [README.md](README.md) for setup.
 
@@ -89,8 +89,8 @@ Tauri uses a restrictive content security policy in `desktop/src-tauri/tauri.con
 
 Secrets at rest:
 
-- The session-cookie signing key (`Settings.secret_key`) is generated lazily in `backend/app/config.py:_default_secret_key`. In development it is the static `dev-credit-tracker-change-me`.
-- In frozen Windows builds it is persisted as `%APPDATA%\CreditTracker\secret.key.dpapi`, encrypted with `CryptProtectData` (DPAPI, user scope, no entropy). The key cannot be decrypted by another Windows user or off the device.
+- The session-cookie signing key (`Settings.secret_key`) is generated lazily in `backend/app/config.py:_default_secret_key`. In development it is the static `dev-centsmith-change-me`.
+- In frozen Windows builds it is persisted as `%APPDATA%\Centsmith\secret.key.dpapi`, encrypted with `CryptProtectData` (DPAPI, user scope, no entropy). The key cannot be decrypted by another Windows user or off the device.
 - On a decrypt failure (different user profile, restored from a non-DPAPI backup) the key is rotated automatically and a one-line warning is written to stderr. Existing sessions are invalidated; the app keeps running.
 - File creation uses `O_EXCL` so a lost race re-reads the winner's value rather than overwriting.
 
@@ -222,7 +222,7 @@ The initial migration can create an empty SQLite database and can also upgrade o
 
 ## Release Pipeline
 
-Signed Windows releases are built by `.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`. The source repo stays private; the workflow publishes installers and the Tauri updater manifest to the public `williamhatcher4/credit_tracker_releases` repo.
+Signed Windows releases are built by `.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`. The source repo stays private; the workflow publishes installers and the Tauri updater manifest to the public `williamhatcher4/centsmith_releases` repo.
 
 Pipeline stages:
 
@@ -234,13 +234,13 @@ Pipeline stages:
 
 Auto-update at runtime:
 
-- `tauri-plugin-updater` polls `https://github.com/williamhatcher4/credit_tracker_releases/releases/latest/download/latest.json` once the backend is reachable. The committed minisign public key in `tauri.conf.json` verifies signatures.
+- `tauri-plugin-updater` polls `https://github.com/williamhatcher4/centsmith_releases/releases/latest/download/latest.json` once the backend is reachable. The committed minisign public key in `tauri.conf.json` verifies signatures.
 - If a newer version exists the user is prompted; on accept, NSIS runs in `passive` mode, the backend sidecar is stopped cleanly, and the app restarts.
 - Update prompt is fired from the navigate thread after `wait_for_port_open` succeeds — never before the user sees the login screen.
 
 Required GitHub secrets:
 
-- `PUBLIC_RELEASES_TOKEN` — fine-grained token with contents-write on `credit_tracker_releases`.
+- `PUBLIC_RELEASES_TOKEN` — fine-grained token with contents-write on `centsmith_releases`.
 - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — minisign keypair for updater artifacts.
 - `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` — Authenticode PFX and its password.
 

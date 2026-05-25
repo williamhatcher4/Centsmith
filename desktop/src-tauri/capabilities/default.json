@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities the main Credit Tracker window needs.",
+  "description": "Capabilities the main Centsmith window needs.",
   "windows": ["main"],
   "permissions": [
     "core:default",

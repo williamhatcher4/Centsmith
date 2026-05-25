@@ -25,7 +25,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Credit Tracker", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Centsmith", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.secret_key,
