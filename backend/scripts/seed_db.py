@@ -13,6 +13,10 @@ from app.services.auth_service import hash_password
 def seed():
     Base.metadata.create_all(bind=engine)
 
+    if settings.desktop_mode:
+        print("Desktop mode: skipping admin seed; local user is provisioned on first request.")
+        return
+
     username = (settings.admin_username or "").strip()
     password = settings.admin_password or ""
     if not username or not password:

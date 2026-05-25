@@ -1,4 +1,5 @@
-﻿from pathlib import Path
+﻿import sys
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -8,6 +9,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import settings
 from app.database import Base, engine
 from app.routers import auth, transactions
+
+
+def _frontend_dist_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        bundle_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        return bundle_root / "frontend" / "dist"
+    return Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 Base.metadata.create_all(bind=engine)
 
@@ -31,7 +39,7 @@ def health():
     return {"status": "ok"}
 
 
-_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+_dist = _frontend_dist_dir()
 if _dist.is_dir():
     assets_dir = _dist / "assets"
     if assets_dir.is_dir():

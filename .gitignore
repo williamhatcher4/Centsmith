@@ -9,7 +9,7 @@ __pycache__/
 backend/.venv/
 backend/.env
 
-# Local database (lives at project root)
+# Local database
 /credit_tracker.db
 *.db-journal
 
@@ -18,8 +18,24 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env
 
+# Packaging — build artifacts, never source
+packaging/build/
+packaging/dist/
+
+# Tauri / Rust build output
+desktop/src-tauri/target/
+
+# Tauri staged resources (populated by build.ps1, not source)
+desktop/src-tauri/resources/backend/
+
 # OS / IDE
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+.vs/
+
+# Loose data files dropped in the repo root (statements, exports, etc.)
+/*.csv
+/*.xls
+/*.xlsx
