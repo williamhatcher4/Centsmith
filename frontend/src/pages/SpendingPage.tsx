@@ -94,7 +94,7 @@ export function SpendingPage() {
                     <BarChart
                       data={chartData}
                       margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-                      onMouseMove={(state) => setHoverIndex(state.activeTooltipIndex != null ? Number(state.activeTooltipIndex) : null)}
+                      onMouseMove={(state) => { if (state.activeTooltipIndex != null) setHoverIndex(Number(state.activeTooltipIndex)) }}
                     >
                       <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
                       <XAxis dataKey="month" tick={{ fill: 'var(--text-subtle)', fontSize: 12 }} />

@@ -76,7 +76,7 @@ def _validate_personal_category(category: Optional[str], tx_type: str) -> None:
 @router.get("", response_model=list[TransactionOut])
 def list_transactions(
     classification: Optional[Literal["personal", "work", "unsorted"]] = Query(None),
-    personal_category: Optional[Literal["uncategorized"]] = Query(None),
+    personal_category: Optional[str] = Query(None, max_length=80),
     expensed: Optional[bool] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
@@ -85,7 +85,7 @@ def list_transactions(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if personal_category == "uncategorized" or classification in {"unsorted", "personal", "work"}:
+    if personal_category or classification in {"unsorted", "personal", "work"}:
         q = db.query(Transaction)
     else:
         q = _base_query(db)
@@ -95,6 +95,8 @@ def list_transactions(
         q = q.filter(Transaction.classification == classification)
     if personal_category == "uncategorized":
         q = q.filter(Transaction.classification == "personal", Transaction.personal_category.is_(None))
+    elif personal_category:
+        q = q.filter(Transaction.classification == "personal", Transaction.personal_category == personal_category)
     if expensed is not None:
         q = q.filter(Transaction.classification == "work", Transaction.expensed.is_(expensed))
     if start_date:

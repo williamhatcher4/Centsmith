@@ -3,7 +3,7 @@ import type { Classification, ClassificationFilter, DashboardSummary, ExpensedFi
 
 export interface TransactionFilters {
   classification?: ClassificationFilter
-  personal_category?: 'uncategorized'
+  personal_category?: string
   expensed?: ExpensedFilter
   start_date?: string
   end_date?: string
