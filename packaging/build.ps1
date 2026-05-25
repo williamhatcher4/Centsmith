@@ -54,6 +54,12 @@ try {
 } finally { Pop-Location }
 
 Step "2/4  PyInstaller (backend sidecar)"
+# Force-remove stale dist output first — OneDrive marks some files read-only
+# which causes PyInstaller's own cleanup to fail with PermissionError.
+if (Test-Path $BackendOut) {
+    Get-ChildItem -Recurse $BackendOut | ForEach-Object { $_.Attributes = "Normal" }
+    Remove-Item -Recurse -Force $BackendOut
+}
 & $Python -m pip show pyinstaller > $null 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Installing PyInstaller into backend venv..." -ForegroundColor Yellow

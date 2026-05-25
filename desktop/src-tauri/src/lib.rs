@@ -55,11 +55,22 @@ fn resolve_backend_exe(app: &AppHandle) -> Result<PathBuf, String> {
         .resource_dir()
         .map_err(|e| format!("resource_dir: {e}"))?;
     debug_log(&format!("resource_dir = {}", resource_dir.display()));
+
+    // NSIS places resources at their source path relative to the tauri project dir,
+    // so "resources/backend/**" lands at <install_dir>/resources/backend/.
+    let nsis = resource_dir.join("resources").join(BACKEND_DIR_NAME).join(BACKEND_EXE_NAME);
+    debug_log(&format!("nsis candidate = {} exists={}", nsis.display(), nsis.is_file()));
+    if nsis.is_file() {
+        return Ok(nsis);
+    }
+
+    // Fallback: resource_dir already points into the resources subdir (dev mode).
     let candidate = resource_dir.join(BACKEND_DIR_NAME).join(BACKEND_EXE_NAME);
     debug_log(&format!("candidate = {} exists={}", candidate.display(), candidate.is_file()));
     if candidate.is_file() {
         return Ok(candidate);
     }
+
     // Dev fallback: repo-relative built backend.
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../packaging/dist/credit-tracker-backend")
@@ -68,8 +79,10 @@ fn resolve_backend_exe(app: &AppHandle) -> Result<PathBuf, String> {
     if dev.is_file() {
         return Ok(dev);
     }
+
     Err(format!(
-        "Could not locate {BACKEND_EXE_NAME}. Looked in: {} and {}",
+        "Could not locate {BACKEND_EXE_NAME}. Looked in: {}, {}, and {}",
+        nsis.display(),
         candidate.display(),
         dev.display()
     ))

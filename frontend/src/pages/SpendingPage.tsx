@@ -42,7 +42,8 @@ export function SpendingPage() {
   const byCategory = data?.by_category ?? []
   const incomeByCategory = income?.by_category ?? []
   const chartData = points.map((p) => ({ month: p.label, amount: p.amount_cents / 100 }))
-  const hoveredPoint = hoverIndex !== null && hoverIndex >= 0 && hoverIndex < points.length ? points[hoverIndex] : null
+  const selectedIndex = hoverIndex ?? points.length - 1
+  const hoveredPoint = selectedIndex >= 0 && selectedIndex < points.length ? points[selectedIndex] : null
   const hoveredCategories = hoveredPoint?.by_category ?? []
 
   return (
@@ -93,8 +94,7 @@ export function SpendingPage() {
                     <BarChart
                       data={chartData}
                       margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-                      onMouseMove={(state) => setHoverIndex(typeof state.activeTooltipIndex === 'number' ? state.activeTooltipIndex : null)}
-                      onMouseLeave={() => setHoverIndex(null)}
+                      onMouseMove={(state) => setHoverIndex(state.activeTooltipIndex != null ? Number(state.activeTooltipIndex) : null)}
                     >
                       <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
                       <XAxis dataKey="month" tick={{ fill: 'var(--text-subtle)', fontSize: 12 }} />
@@ -107,10 +107,8 @@ export function SpendingPage() {
               </Card>
 
               <Card variant="solid" padding="md">
-                <CardHeader title={hoveredPoint ? hoveredPoint.label : 'Selected month'} actions={hoveredPoint ? <span className="text-sm font-bold tabular-nums text-[var(--text)]">{formatMoney(hoveredPoint.amount_cents)}</span> : undefined} />
-                {!hoveredPoint ? (
-                  <p className="text-sm text-[var(--text-subtle)]">Hover over a bar to see that month's category breakdown.</p>
-                ) : hoveredCategories.length === 0 ? (
+                <CardHeader title={hoveredPoint ? hoveredPoint.label : 'No data'} actions={hoveredPoint ? <span className="text-sm font-bold tabular-nums text-[var(--text)]">{formatMoney(hoveredPoint.amount_cents)}</span> : undefined} />
+                {hoveredCategories.length === 0 ? (
                   <p className="text-sm text-[var(--text-subtle)]">No personal spending in this month.</p>
                 ) : (
                   <div className="flex flex-col gap-4">
