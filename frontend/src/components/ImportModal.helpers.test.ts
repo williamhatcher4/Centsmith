@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ImportPreviewRow } from '../types'
-import { repeatGroupInfo, signedMoney } from './ImportModal'
+import { repeatGroupInfo, signedMoney } from './ImportModal.helpers'
 
 function row(overrides: Partial<ImportPreviewRow> & { row_number: number }): ImportPreviewRow {
   return {
