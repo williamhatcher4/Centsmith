@@ -89,6 +89,22 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: .\packaging\build.ps1 -SkipTauri -ObfuscateBackend
 
+      - name: Verify Windows signing command
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_PATH: ${{ env.WINDOWS_CERTIFICATE_PATH }}
+        run: |
+          $backendExe = Get-ChildItem -Path "desktop\src-tauri\resources\backend" -Recurse -Filter "*.exe" |
+            Select-Object -First 1
+          if (-not $backendExe) {
+            throw "No staged backend executable found to verify the signing command."
+          }
+          & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File ".\packaging\sign-windows.ps1" `
+            -FilePath $backendExe.FullName
+
       - name: Build and publish Tauri release
         id: tauri_build
         uses: tauri-apps/tauri-action@v0
