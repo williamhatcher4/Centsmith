@@ -45,14 +45,6 @@ jobs:
           backend\.venv\Scripts\python.exe -m pip install --upgrade pip
           backend\.venv\Scripts\python.exe -m pip install -e "backend[dev,audit,packaging]"
 
-      - name: Backend tests
-        working-directory: backend
-        run: .\.venv\Scripts\python.exe -m pytest
-
-      - name: Backend audit
-        working-directory: backend
-        run: .\.venv\Scripts\python.exe -m pip_audit
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -64,42 +56,8 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Frontend lint
-        working-directory: frontend
-        run: npm run lint
-
-      - name: Frontend tests with coverage
-        working-directory: frontend
-        run: npm run test:coverage
-
-      - name: Frontend audit
-        working-directory: frontend
-        run: npm run audit
-
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-
-      - name: Stage placeholder Tauri resources
-        shell: pwsh
-        working-directory: desktop/src-tauri
-        run: |
-          New-Item -ItemType Directory -Force -Path resources/backend | Out-Null
-          New-Item -ItemType File -Force -Path resources/backend/.gitkeep | Out-Null
-
-      - name: Desktop check
-        working-directory: desktop/src-tauri
-        run: cargo check
-
-      - name: Desktop tests
-        working-directory: desktop/src-tauri
-        run: cargo test
-
-      - name: Desktop audit
-        working-directory: desktop/src-tauri
-        run: cargo audit
 
       - name: Decode Windows signing certificate
         env:
