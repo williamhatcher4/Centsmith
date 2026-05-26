@@ -7,6 +7,19 @@ import { login } from './helpers'
 const fixture = path.resolve(__dirname, '..', 'fixtures', 'classify-statement.csv')
 const TARGET = 'Specialty bookstore'
 
+type TargetTransaction = {
+  id: number
+  classification: 'personal' | 'work' | null
+  personal_category: string | null
+}
+
+async function getTargetTransaction(page: Parameters<typeof login>[0]) {
+  const response = await page.request.get('/api/v1/transactions', { params: { limit: '1000' } })
+  expect(response.ok()).toBeTruthy()
+  const transactions = await response.json() as Array<TargetTransaction & { description: string }>
+  return transactions.find((tx) => tx.description === TARGET) ?? null
+}
+
 test('classifies an inbox row as personal and categorizes it', async ({ page }) => {
   await login(page)
 
@@ -25,12 +38,28 @@ test('classifies an inbox row as personal and categorizes it', async ({ page }) 
     await page.getByRole('button', { name: /cancel/i }).click()
   }
 
+  await expect.poll(async () => (await getTargetTransaction(page))?.id ?? null, {
+    message: `${TARGET} should exist after import`,
+    timeout: 10_000,
+  }).not.toBeNull()
+  const importedTarget = await getTargetTransaction(page)
+  expect(importedTarget).not.toBeNull()
+
+  if (importedTarget?.personal_category === 'Dining') {
+    return
+  }
+
   // Classify the target row as Personal (skip if already classified on a retry)
-  await page.goto('/inbox')
-  const targetRow = page.locator('tbody tr').filter({ hasText: TARGET })
-  if ((await targetRow.count()) > 0) {
+  if (importedTarget?.classification !== 'personal') {
+    await page.goto('/inbox')
+    const targetRow = page.locator('tbody tr').filter({ hasText: TARGET })
+    await expect(targetRow).toBeVisible({ timeout: 10_000 })
     await targetRow.getByRole('button', { name: /personal/i }).click()
     await expect(targetRow).toHaveCount(0, { timeout: 10_000 })
+    await expect.poll(async () => (await getTargetTransaction(page))?.classification, {
+      message: `${TARGET} should be classified as personal`,
+      timeout: 10_000,
+    }).toBe('personal')
   }
 
   // Categorize it from the Personal Inbox
