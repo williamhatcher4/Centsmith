@@ -221,11 +221,11 @@ the private source repo:
   `williamhatcher4/centsmith_releases`
 - `TAURI_SIGNING_PRIVATE_KEY` - contents of `packaging\centsmith-updater.key`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` - blank if the generated key has no password
-- `WINDOWS_CERTIFICATE_BASE64` - base64 encoded `.pfx` code-signing certificate
-- `WINDOWS_CERTIFICATE_PASSWORD` - `.pfx` password
+- `WINDOWS_CERTIFICATE_BASE64` - optional base64 encoded `.pfx` code-signing certificate for Authenticode signing
+- `WINDOWS_CERTIFICATE_PASSWORD` - optional `.pfx` password
 
 The updater public key is committed in `desktop\src-tauri\tauri.conf.json`.
-Keep the private updater key and Windows signing certificate out of git.
+Keep the private updater key out of git. If you configure an Authenticode certificate later, keep that certificate out of git too.
 
 ---
 

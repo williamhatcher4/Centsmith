@@ -682,6 +682,211 @@ def test_migrations_create_empty_sqlite_database(tmp_path, monkeypatch):
     assert {"expensed", "personal_category"}.issubset(transaction_columns)
 
 
+def test_logout_clears_session(client):
+    login(client)
+    assert client.get("/api/v1/auth/me").status_code == 200
+
+    response = client.post("/api/v1/auth/logout")
+    assert response.status_code == 200
+    assert response.json()["message"] == "Logged out"
+
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_bulk_classify_marks_transactions_personal_or_work(client, db_session):
+    one = add_transaction(db_session, description="Coffee", amount_cents=425, transaction_type="debit")
+    two = add_transaction(db_session, description="Lunch", amount_cents=1200, transaction_type="debit")
+
+    login(client)
+
+    response = client.post(
+        "/api/v1/transactions/bulk-classify",
+        json={"transaction_ids": [one.id, two.id], "classification": "personal"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"updated": 2}
+
+    refreshed = client.get("/api/v1/transactions", params={"classification": "personal"}).json()
+    assert {row["id"] for row in refreshed} == {one.id, two.id}
+
+
+def test_bulk_classify_clears_expensed_and_personal_category_on_reclassify(client, db_session):
+    work_tx = add_transaction(
+        db_session,
+        description="Client lunch",
+        amount_cents=3200,
+        transaction_type="debit",
+        classification="work",
+        expensed=True,
+    )
+    personal_tx = add_transaction(
+        db_session,
+        description="Coffee",
+        amount_cents=425,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Dining",
+    )
+
+    login(client)
+
+    assert client.post(
+        "/api/v1/transactions/bulk-classify",
+        json={"transaction_ids": [work_tx.id], "classification": "personal"},
+    ).status_code == 200
+    assert client.post(
+        "/api/v1/transactions/bulk-classify",
+        json={"transaction_ids": [personal_tx.id], "classification": "work"},
+    ).status_code == 200
+
+    db_session.expire_all()
+    assert db_session.query(Transaction).filter_by(id=work_tx.id).one().expensed is False
+    assert db_session.query(Transaction).filter_by(id=personal_tx.id).one().personal_category is None
+
+
+def test_bulk_classify_returns_404_when_any_id_missing(client, db_session):
+    real = add_transaction(db_session, description="Coffee", amount_cents=425, transaction_type="debit")
+
+    login(client)
+
+    response = client.post(
+        "/api/v1/transactions/bulk-classify",
+        json={"transaction_ids": [real.id, real.id + 999], "classification": "personal"},
+    )
+    assert response.status_code == 404
+
+
+def test_bulk_classify_rejects_empty_payload(client):
+    login(client)
+    response = client.post(
+        "/api/v1/transactions/bulk-classify",
+        json={"transaction_ids": [], "classification": "personal"},
+    )
+    assert response.status_code == 422
+
+
+def test_personal_income_aggregates_credits_in_income_categories(client, db_session):
+    add_transaction(
+        db_session,
+        description="Paycheck",
+        amount_cents=200000,
+        transaction_type="credit",
+        classification="personal",
+        personal_category="Income",
+        transaction_date=date(2026, 5, 15),
+    )
+    add_transaction(
+        db_session,
+        description="Reimbursement",
+        amount_cents=5000,
+        transaction_type="credit",
+        classification="personal",
+        personal_category="Reimbursement",
+        transaction_date=date(2026, 5, 20),
+    )
+    add_transaction(
+        db_session,
+        description="Refund",
+        amount_cents=1000,
+        transaction_type="credit",
+        classification="personal",
+        personal_category="Dining",
+        transaction_date=date(2026, 5, 25),
+    )
+
+    login(client)
+
+    response = client.get("/api/v1/transactions/income/personal", params={"months": 12})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_cents"] == 205000
+    category_names = {row["category_name"] for row in body["by_category"]}
+    assert category_names == {"Income", "Reimbursement"}
+
+
+def test_personal_income_excludes_debits(client, db_session):
+    add_transaction(
+        db_session,
+        description="Salary debit weirdness",
+        amount_cents=200000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Income",
+    )
+
+    login(client)
+
+    body = client.get("/api/v1/transactions/income/personal").json()
+    assert body["total_cents"] == 0
+
+
+def test_checking_import_preview_keeps_credits(client):
+    login(client)
+    files = statement_file([
+        ["2026-05-01", "Paycheck", "", "2000.00"],
+        ["2026-05-02", "Rent", "1500.00", ""],
+    ])
+    response = client.post("/api/v1/transactions/import/checking/preview", files=files)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert body["ignored_credits"] == 0
+    assert body["to_import"] == 2
+
+
+def test_checking_import_confirm_assigns_personal_classification(client, db_session):
+    login(client)
+    files = statement_file([
+        ["2026-05-01", "Paycheck", "", "2000.00"],
+        ["2026-05-02", "Rent", "1500.00", ""],
+    ])
+    response = client.post("/api/v1/transactions/import/checking/confirm", files=files)
+    assert response.status_code == 200
+    assert response.json() == {"imported": 2, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
+
+    stored = db_session.query(Transaction).order_by(Transaction.transaction_date).all()
+    assert all(tx.classification == "personal" for tx in stored)
+
+
+def test_transactions_filter_by_date_range(client, db_session):
+    in_range = add_transaction(
+        db_session,
+        description="In range",
+        amount_cents=1000,
+        transaction_type="debit",
+        transaction_date=date(2026, 5, 15),
+    )
+    add_transaction(
+        db_session,
+        description="Too early",
+        amount_cents=1000,
+        transaction_type="debit",
+        transaction_date=date(2026, 4, 30),
+    )
+    add_transaction(
+        db_session,
+        description="Too late",
+        amount_cents=1000,
+        transaction_type="debit",
+        transaction_date=date(2026, 6, 1),
+    )
+
+    login(client)
+
+    response = client.get(
+        "/api/v1/transactions",
+        params={"start_date": "2026-05-01", "end_date": "2026-05-31"},
+    )
+    assert response.status_code == 200
+    assert {row["id"] for row in response.json()} == {in_range.id}
+
+
+def test_health_endpoint_responds_without_auth(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def test_migrations_upgrade_existing_sqlite_database_missing_new_columns(tmp_path, monkeypatch):
     db_path = tmp_path / "legacy.db"
     engine = create_engine(f"sqlite:///{db_path}")

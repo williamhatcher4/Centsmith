@@ -20,7 +20,12 @@ env:
   PUBLIC_RELEASE_REPO: centsmith_releases
 
 jobs:
+  ci-gate:
+    name: CI gate (full suite)
+    uses: ./.github/workflows/ci.yml
+
   release-windows:
+    needs: ci-gate
     runs-on: windows-latest
 
     steps:
@@ -63,12 +68,19 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: Frontend tests with coverage
+        working-directory: frontend
+        run: npm run test:coverage
+
       - name: Frontend audit
         working-directory: frontend
         run: npm run audit
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
 
       - name: Stage placeholder Tauri resources
         shell: pwsh
@@ -81,17 +93,25 @@ jobs:
         working-directory: desktop/src-tauri
         run: cargo check
 
+      - name: Desktop tests
+        working-directory: desktop/src-tauri
+        run: cargo test
+
+      - name: Desktop audit
+        working-directory: desktop/src-tauri
+        run: cargo audit
+
       - name: Decode Windows signing certificate
         env:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
-            throw "WINDOWS_CERTIFICATE_BASE64 secret is required."
+            Write-Host "WINDOWS_CERTIFICATE_BASE64 secret is not configured; Windows Authenticode signing will be skipped."
+            exit 0
           }
           $certPath = Join-Path $env:RUNNER_TEMP "centsmith-code-signing.pfx"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
           "WINDOWS_CERTIFICATE_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "CI_RELEASE_SIGNING_REQUIRED=1" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Sync tauri.conf.json version to release tag
         shell: pwsh
@@ -111,7 +131,8 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: .\packaging\build.ps1 -SkipTauri -ObfuscateBackend
 
-      - name: Build, sign, and publish Tauri release
+      - name: Build and publish Tauri release
+        id: tauri_build
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
@@ -119,7 +140,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           WINDOWS_CERTIFICATE_PATH: ${{ env.WINDOWS_CERTIFICATE_PATH }}
-          CI_RELEASE_SIGNING_REQUIRED: "1"
         with:
           projectPath: desktop/src-tauri
           owner: ${{ env.PUBLIC_RELEASE_OWNER }}
@@ -133,3 +153,7 @@ jobs:
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
           uploadUpdaterSignatures: true
+
+      - name: Installer smoke test (install, launch, health probe, uninstall)
+        shell: pwsh
+        run: .\packaging\installer-smoke-test.ps1

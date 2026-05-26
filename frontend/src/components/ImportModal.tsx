@@ -7,11 +7,11 @@ import { formatMoney } from '../utils/money'
 import { cn } from '../utils/cn'
 import { Badge, Button, Modal } from './ui'
 
-function signedMoney(cents: number, type: 'credit' | 'debit') {
+export function signedMoney(cents: number, type: 'credit' | 'debit') {
   return `${type === 'credit' ? '+' : '-'}${formatMoney(cents)}`
 }
 
-function repeatGroupInfo(rows: ImportPreviewRow[]): Map<number, { index: number; size: number }> {
+export function repeatGroupInfo(rows: ImportPreviewRow[]): Map<number, { index: number; size: number }> {
   const groups = new Map<string, number[]>()
   for (const row of rows) {
     const key = `${row.date}|${row.description.trim().toLowerCase()}|${row.amount_cents}|${row.transaction_type}`

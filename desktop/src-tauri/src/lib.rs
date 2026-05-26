@@ -24,10 +24,22 @@ const RUNTIME_FILE_NAME: &str = "runtime.json";
 const BOOTSTRAP_PATH: &str = "/desktop-bootstrap";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, PartialEq, Eq)]
 struct RuntimeMetadata {
     port: u16,
     token: String,
+}
+
+fn pick_first_existing(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates.iter().find(|p| p.is_file()).cloned()
+}
+
+fn parse_runtime_metadata(raw: &str) -> Result<RuntimeMetadata, String> {
+    serde_json::from_str(raw).map_err(|e| format!("runtime metadata parse error: {e}"))
+}
+
+fn is_bootstrap_path(path: &str) -> bool {
+    path == BOOTSTRAP_PATH
 }
 
 fn user_data_dir() -> PathBuf {
@@ -66,6 +78,23 @@ fn chrono_now() -> String {
         .unwrap_or_else(|_| "?".into())
 }
 
+fn backend_exe_candidates(resource_dir: &PathBuf) -> [PathBuf; 3] {
+    [
+        // NSIS places resources at their source path relative to the tauri project dir,
+        // so "resources/backend/**" lands at <install_dir>/resources/backend/.
+        resource_dir
+            .join("resources")
+            .join(BACKEND_DIR_NAME)
+            .join(BACKEND_EXE_NAME),
+        // Fallback: resource_dir already points into the resources subdir (dev mode).
+        resource_dir.join(BACKEND_DIR_NAME).join(BACKEND_EXE_NAME),
+        // Dev fallback: repo-relative built backend.
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packaging/dist/centsmith-backend")
+            .join(BACKEND_EXE_NAME),
+    ]
+}
+
 fn resolve_backend_exe(app: &AppHandle) -> Result<PathBuf, String> {
     let resource_dir = app
         .path()
@@ -73,51 +102,23 @@ fn resolve_backend_exe(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("resource_dir: {e}"))?;
     debug_log(&format!("resource_dir = {}", resource_dir.display()));
 
-    // NSIS places resources at their source path relative to the tauri project dir,
-    // so "resources/backend/**" lands at <install_dir>/resources/backend/.
-    let nsis = resource_dir
-        .join("resources")
-        .join(BACKEND_DIR_NAME)
-        .join(BACKEND_EXE_NAME);
-    debug_log(&format!(
-        "nsis candidate = {} exists={}",
-        nsis.display(),
-        nsis.is_file()
-    ));
-    if nsis.is_file() {
-        return Ok(nsis);
+    let candidates = backend_exe_candidates(&resource_dir);
+    for candidate in &candidates {
+        debug_log(&format!(
+            "candidate = {} exists={}",
+            candidate.display(),
+            candidate.is_file()
+        ));
     }
 
-    // Fallback: resource_dir already points into the resources subdir (dev mode).
-    let candidate = resource_dir.join(BACKEND_DIR_NAME).join(BACKEND_EXE_NAME);
-    debug_log(&format!(
-        "candidate = {} exists={}",
-        candidate.display(),
-        candidate.is_file()
-    ));
-    if candidate.is_file() {
-        return Ok(candidate);
-    }
-
-    // Dev fallback: repo-relative built backend.
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../packaging/dist/centsmith-backend")
-        .join(BACKEND_EXE_NAME);
-    debug_log(&format!(
-        "dev fallback = {} exists={}",
-        dev.display(),
-        dev.is_file()
-    ));
-    if dev.is_file() {
-        return Ok(dev);
-    }
-
-    Err(format!(
-        "Could not locate {BACKEND_EXE_NAME}. Looked in: {}, {}, and {}",
-        nsis.display(),
-        candidate.display(),
-        dev.display()
-    ))
+    pick_first_existing(&candidates).ok_or_else(|| {
+        let summary = candidates
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Could not locate {BACKEND_EXE_NAME}. Looked in: {summary}")
+    })
 }
 
 fn spawn_backend(app: &AppHandle) -> Result<Child, String> {
@@ -139,12 +140,12 @@ fn read_runtime_metadata(timeout: Duration) -> Result<RuntimeMetadata, String> {
     let deadline = Instant::now() + timeout;
     loop {
         if let Ok(contents) = fs::read_to_string(&runtime_file) {
-            match serde_json::from_str::<RuntimeMetadata>(&contents) {
+            match parse_runtime_metadata(&contents) {
                 Ok(metadata) => {
                     let _ = fs::remove_file(&runtime_file);
                     return Ok(metadata);
                 }
-                Err(e) => debug_log(&format!("runtime metadata parse error: {e}")),
+                Err(e) => debug_log(&e),
             }
         }
         if Instant::now() >= deadline {
@@ -323,7 +324,7 @@ pub fn run() {
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
-            if payload.url().path() != BOOTSTRAP_PATH {
+            if !is_bootstrap_path(payload.url().path()) {
                 return;
             }
             let token = webview
@@ -381,4 +382,99 @@ pub fn run() {
                 stop_backend(app);
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use tempfile::tempdir;
+
+    #[test]
+    fn pick_first_existing_returns_first_match() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("nope.exe");
+        let exists = dir.path().join("real.exe");
+        File::create(&exists).unwrap();
+        let result = pick_first_existing(&[missing.clone(), exists.clone()]);
+        assert_eq!(result, Some(exists));
+    }
+
+    #[test]
+    fn pick_first_existing_prefers_earlier_candidate() {
+        let dir = tempdir().unwrap();
+        let first = dir.path().join("first.exe");
+        let second = dir.path().join("second.exe");
+        File::create(&first).unwrap();
+        File::create(&second).unwrap();
+        let result = pick_first_existing(&[first.clone(), second]);
+        assert_eq!(result, Some(first));
+    }
+
+    #[test]
+    fn pick_first_existing_returns_none_when_all_missing() {
+        let dir = tempdir().unwrap();
+        let a = dir.path().join("a.exe");
+        let b = dir.path().join("b.exe");
+        assert!(pick_first_existing(&[a, b]).is_none());
+    }
+
+    #[test]
+    fn parse_runtime_metadata_accepts_valid_json() {
+        let parsed = parse_runtime_metadata(r#"{"port": 8012, "token": "abc"}"#).unwrap();
+        assert_eq!(
+            parsed,
+            RuntimeMetadata {
+                port: 8012,
+                token: "abc".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn parse_runtime_metadata_rejects_malformed_json() {
+        let err = parse_runtime_metadata("not json").unwrap_err();
+        assert!(err.contains("parse error"));
+    }
+
+    #[test]
+    fn parse_runtime_metadata_rejects_missing_fields() {
+        let err = parse_runtime_metadata(r#"{"port": 8012}"#).unwrap_err();
+        assert!(err.contains("parse error"));
+    }
+
+    #[test]
+    fn parse_runtime_metadata_rejects_wrong_port_type() {
+        let err = parse_runtime_metadata(r#"{"port": "8012", "token": "abc"}"#).unwrap_err();
+        assert!(err.contains("parse error"));
+    }
+
+    #[test]
+    fn is_bootstrap_path_matches_only_exact_bootstrap() {
+        assert!(is_bootstrap_path("/desktop-bootstrap"));
+        assert!(!is_bootstrap_path("/desktop-bootstrap/"));
+        assert!(!is_bootstrap_path("/desktop-bootstrap?token=x"));
+        assert!(!is_bootstrap_path("/desktop-bootstrap/extra"));
+        assert!(!is_bootstrap_path("/"));
+        assert!(!is_bootstrap_path("/Desktop-Bootstrap"));
+    }
+
+    #[test]
+    fn backend_exe_candidates_includes_nsis_dev_subdir_and_repo_fallback() {
+        let resource_dir = PathBuf::from("C:\\Program Files\\Centsmith");
+        let candidates = backend_exe_candidates(&resource_dir);
+        assert!(candidates[0]
+            .to_string_lossy()
+            .contains("resources"));
+        assert!(candidates[1].to_string_lossy().contains(BACKEND_DIR_NAME));
+        assert!(candidates[2]
+            .to_string_lossy()
+            .contains("packaging/dist/centsmith-backend") ||
+            candidates[2]
+                .to_string_lossy()
+                .contains("packaging\\dist\\centsmith-backend"));
+        for c in &candidates {
+            assert!(c.to_string_lossy().ends_with(BACKEND_EXE_NAME));
+        }
+    }
 }

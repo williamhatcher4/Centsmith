@@ -227,10 +227,10 @@ Signed Windows releases are built by `.github/workflows/release.yml` on `v*` tag
 Pipeline stages:
 
 1. Backend tests, `pip_audit`, frontend lint and audit, `cargo check`.
-2. Decode the base64'd PFX into the runner's temp dir and export its path.
+2. If `WINDOWS_CERTIFICATE_BASE64` is configured, decode the PFX into the runner's temp dir and export its path; otherwise skip Authenticode signing.
 3. Inject the tag version (`vX.Y.Z`) into `desktop/src-tauri/tauri.conf.json`. The committed version stays at `0.1.0` as a sentinel — CI is the only place it's mutated.
 4. Run `packaging/build.ps1 -SkipTauri -ObfuscateBackend`. PyArmor obfuscates the sidecar, PyInstaller packs it, and `packaging/validate-release-artifacts.ps1` aborts the build if any `.env`, `.pfx`, `.p12`, `.pem`, or `.key` file — or any file named `private`, `credential`, `password`, `signing-key`, or `signing_key` — has slipped into the staged bundle.
-5. `tauri-apps/tauri-action@v0` builds the Tauri shell, invokes `packaging/sign-windows.ps1` (Authenticode SHA256 + RFC 3161 timestamp) for every produced binary, generates updater `.sig` files, and publishes the NSIS installer plus `latest.json` to the public release.
+5. `tauri-apps/tauri-action@v0` builds the Tauri shell, invokes `packaging/sign-windows.ps1` for each produced binary when a certificate is configured, generates updater `.sig` files, and publishes the NSIS installer plus `latest.json` to the public release.
 
 Auto-update at runtime:
 
@@ -242,9 +242,9 @@ Required GitHub secrets:
 
 - `PUBLIC_RELEASES_TOKEN` — fine-grained token with contents-write on `centsmith_releases`.
 - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — minisign keypair for updater artifacts.
-- `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` — Authenticode PFX and its password.
+- Optional: `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` - Authenticode PFX and its password. Leave unset to publish unsigned Windows installers for now.
 
-For local signing on a developer workstation, prefer importing the PFX into the user's cert store once and signing via `/sha1 <thumbprint>` — `packaging/sign-windows.ps1` documents the `/p`-on-argv trade-off CI accepts but locals shouldn't.
+For local signing on a developer workstation, prefer importing the PFX into the user's cert store once and signing via `/sha1 <thumbprint>`. `packaging/sign-windows.ps1` documents the `/p`-on-argv trade-off CI accepts when signing is enabled.
 
 ## Important Backend Endpoints
 

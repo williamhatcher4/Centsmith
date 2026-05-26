@@ -19,11 +19,17 @@ backend/.env.*
 # Local database
 /credit_tracker.db
 /centsmith.db
+/centsmith-e2e.db
 *.sqlite
 *.sqlite3
 *.db-journal
 *.db-shm
 *.db-wal
+
+# E2E test artifacts
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
 
 # Runtime logs and local metadata
 *.log

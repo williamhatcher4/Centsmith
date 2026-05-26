@@ -1,0 +1,265 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for pages/InboxPage.tsx</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../prettify.css" />
+    <link rel="stylesheet" href="../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../index.html">All files</a> / <a href="index.html">pages</a> InboxPage.tsx</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">85.36% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>35/41</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">58.62% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>17/29</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">78.26% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>18/23</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">88.46% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>23/26</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line high'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">22x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">34x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">﻿import { useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { BriefcaseBusiness, CheckSquare, Inbox, Search, UserRoundCheck } from 'lucide-react'
+import { transactionsApi } from '../api/transactions'
+import type { Classification, Transaction } from '../types'
+import { formatMoney } from '../utils/money'
+import { cn } from '../utils/cn'
+import { Button, Card, Empty, Field, Input, PageHeader, Select, Skeleton, StatCard } from '../components/ui'
+&nbsp;
+function fmtDate(d: string) { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+function signedMoney(tx: Transaction) { return `${tx.transaction_type === 'credit' ? <span class="branch-0 cbranch-no" title="branch not covered" >'+' : '</span>-'}${formatMoney(tx.amount_cents)}` }
+&nbsp;
+export function InboxPage() {
+  const [selectedIds, setSelectedIds] = useState&lt;Set&lt;number&gt;&gt;(new Set())
+  const [bulkClass, setBulkClass] = useState&lt;Classification | ''&gt;('')
+  const [search, setSearch] = useState('')
+  const qc = useQueryClient()
+  const { data: transactions = [], isLoading } = useQuery({ queryKey: ['transactions', 'unsorted'], queryFn: () =&gt; transactionsApi.list({ classification: 'unsorted', limit: 500 }) })
+&nbsp;
+  const filtered = useMemo(() =&gt; transactions.filter((tx) =&gt; tx.description.toLowerCase().includes(search.trim().toLowerCase())), [transactions, search])
+  const selected = filtered.filter((tx) =&gt; selectedIds.has(tx.id))
+  const total = transactions.reduce((sum, tx) =&gt; sum + (tx.transaction_type === 'debit' ? tx.amount_cents : <span class="branch-1 cbranch-no" title="branch not covered" >-tx.amount_cents), 0</span>)
+&nbsp;
+  const classify = useMutation({
+    mutationFn: ({ ids, classification }: { ids: number[]; classification: Classification }) =&gt; transactionsApi.bulkClassify(ids, classification),
+    onSuccess: () =&gt; { setSelectedIds(new Set()); setBulkClass(''); qc.invalidateQueries({ queryKey: ['transactions'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['spending'] }) },
+  })
+&nbsp;
+  function toggle(id: number) {
+    setSelectedIds((prev) =&gt; {
+      const next = new Set(prev)
+      <span class="missing-if-branch" title="if path not taken" >I</span>if (next.has(id)) {
+<span class="cstat-no" title="statement not covered" >        next.delete(id)</span>
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+  function <span class="fstat-no" title="function not covered" >toggleAll() {</span> <span class="cstat-no" title="statement not covered" >setSelectedIds(selectedIds.size === filtered.length ? new Set() : new Set(filtered.<span class="fstat-no" title="function not covered" >map((t</span>x) =&gt; <span class="cstat-no" title="statement not covered" >tx.id)</span>)) }</span>
+  function <span class="fstat-no" title="function not covered" >applyOne(t</span>x: Transaction, classification: Classification) { <span class="cstat-no" title="statement not covered" >classify.mutate({ ids: [tx.id], classification }) }</span>
+  function applyBulk() { <span class="missing-if-branch" title="else path not taken" >E</span>if (selected.length &amp;&amp; bulkClass) classify.mutate({ ids: selected.map((tx) =&gt; tx.id), classification: bulkClass }) }
+&nbsp;
+  return &lt;div&gt;
+    &lt;PageHeader title="Inbox" subtitle="Sort imported transactions into Personal or Work" /&gt;
+    &lt;div className="mb-6 grid gap-4 sm:grid-cols-3"&gt;
+      &lt;StatCard label="Open items" value={String(transactions.length)} icon={&lt;Inbox className="size-4" /&gt;} /&gt;
+      &lt;StatCard label="Net amount" value={formatMoney(total)} /&gt;
+      &lt;StatCard label="Selected" value={String(selected.length)} tone={selected.length ? 'accent' : 'neutral'} /&gt;
+    &lt;/div&gt;
+    &lt;Card variant="solid" padding="md" className="mb-5"&gt;
+      &lt;div className="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-end"&gt;
+        &lt;Field label="Search" htmlFor="search"&gt;&lt;div className="relative"&gt;&lt;Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-faint)]" /&gt;&lt;Input id="search" className="pl-9" value={search} onChange={(e) =&gt; setSearch(e.target.value)} placeholder="Description" /&gt;&lt;/div&gt;&lt;/Field&gt;
+        &lt;Field label="Bulk sort" htmlFor="bulk"&gt;&lt;Select id="bulk" value={bulkClass} onChange={(e) =&gt; setBulkClass(e.target.value as Classification | '')} className="min-w-[190px]"&gt;&lt;option value=""&gt;Choose type&lt;/option&gt;&lt;option value="personal"&gt;Personal&lt;/option&gt;&lt;option value="work"&gt;Work&lt;/option&gt;&lt;/Select&gt;&lt;/Field&gt;
+        &lt;Button disabled={!selected.length || !bulkClass} loading={classify.isPending} leftIcon={&lt;CheckSquare className="size-4" /&gt;} onClick={applyBulk}&gt;Apply to {selected.length}&lt;/Button&gt;
+      &lt;/div&gt;
+    &lt;/Card&gt;
+    {isLoading ? &lt;Skeleton className="h-80" /&gt; : filtered.length === 0 ? <span class="branch-0 cbranch-no" title="branch not covered" >&lt;Empty icon={&lt;Inbox className="size-6" /&gt;} title={transactions.length ? 'No matches' : 'Inbox clear'} description={transactions.length ? 'Try another search.' : 'Every imported transaction is sorted.'} /&gt; : &lt;C</span>ard variant="solid" padding="none" className="overflow-hidden"&gt;&lt;div className="overflow-x-auto"&gt;&lt;table className="w-full text-sm"&gt;&lt;thead&gt;&lt;tr className="border-b border-[var(--border)] text-left text-xs font-semibold uppercase text-[var(--text-subtle)]"&gt;&lt;th className="w-1 px-4 py-3"&gt;&lt;input type="checkbox" className="size-4 accent-[var(--accent)]" checked={filtered.length &gt; 0 &amp;&amp; selectedIds.size === filtered.length} onChange={toggleAll} /&gt;&lt;/th&gt;&lt;th className="px-4 py-3"&gt;Date&lt;/th&gt;&lt;th className="px-4 py-3"&gt;Description&lt;/th&gt;&lt;th className="px-4 py-3 text-right"&gt;Amount&lt;/th&gt;&lt;th className="px-4 py-3"&gt;Sort&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;{filtered.map((tx) =&gt; &lt;tr key={tx.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-muted)]"&gt;&lt;td className="px-4 py-3"&gt;&lt;input type="checkbox" className="size-4 accent-[var(--accent)]" checked={selectedIds.has(tx.id)} onChange={() =&gt; toggle(tx.id)} /&gt;&lt;/td&gt;&lt;td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--text-subtle)]"&gt;{fmtDate(tx.transaction_date)}&lt;/td&gt;&lt;td className="px-4 py-3 font-medium"&gt;{tx.description}&lt;/td&gt;&lt;td className={cn('whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums', tx.transaction_type === 'credit' ? <span class="branch-0 cbranch-no" title="branch not covered" >'text-[var(--success)]' : '</span>text-[var(--danger)]')}&gt;{signedMoney(tx)}&lt;/td&gt;&lt;td className="px-4 py-3"&gt;&lt;div className="flex gap-2"&gt;&lt;Button size="sm" variant="secondary" leftIcon={&lt;UserRoundCheck className="size-4" /&gt;} <span class="fstat-no" title="function not covered" >onClick={() =&gt; <span class="cstat-no" title="statement not covered" >a</span>pplyOne(tx, 'personal')}&gt;P</span>ersonal&lt;/Button&gt;&lt;Button size="sm" variant="secondary" leftIcon={&lt;BriefcaseBusiness className="size-4" /&gt;} <span class="fstat-no" title="function not covered" >onClick={() =&gt; <span class="cstat-no" title="statement not covered" >a</span>pplyOne(tx, 'work')}&gt;W</span>ork&lt;/Button&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;)}&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/Card&gt;}
+  &lt;/div&gt;
+}
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-05-26T01:11:07.457Z
+            </div>
+        <script src="../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../sorter.js"></script>
+        <script src="../block-navigation.js"></script>
+    </body>
+</html>
+    
