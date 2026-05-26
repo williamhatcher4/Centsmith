@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 
 const BACKEND_PORT = Number(process.env.CENTSMITH_E2E_BACKEND_PORT ?? 18012)
@@ -9,7 +10,11 @@ const SESSION_SECRET = 'centsmith-e2e-secret-do-not-use-anywhere-else'
 const repoRoot = path.resolve(__dirname, '..')
 const backendDir = path.join(repoRoot, 'backend')
 const frontendDir = path.join(repoRoot, 'frontend')
-const pythonExe = path.join(backendDir, '.venv', 'Scripts', 'python.exe')
+const venvPython = process.platform === 'win32'
+  ? path.join(backendDir, '.venv', 'Scripts', 'python.exe')
+  : path.join(backendDir, '.venv', 'bin', 'python')
+const pythonExe = process.env.CENTSMITH_E2E_PYTHON
+  ?? (existsSync(venvPython) ? venvPython : 'python')
 
 const sharedEnv: Record<string, string> = {
   DATABASE_URL: `sqlite:///${DB_PATH.replace(/\\/g, '/')}`,

@@ -5,7 +5,11 @@ import path from 'node:path'
 export default async function globalSetup() {
   const repoRoot = path.resolve(__dirname, '..')
   const dbPath = path.join(repoRoot, 'centsmith-e2e.db')
-  const pythonExe = path.join(repoRoot, 'backend', '.venv', 'Scripts', 'python.exe')
+  const venvPython = process.platform === 'win32'
+    ? path.join(repoRoot, 'backend', '.venv', 'Scripts', 'python.exe')
+    : path.join(repoRoot, 'backend', '.venv', 'bin', 'python')
+  const pythonExe = process.env.CENTSMITH_E2E_PYTHON
+    ?? (existsSync(venvPython) ? venvPython : 'python')
 
   for (const candidate of [dbPath, `${dbPath}-journal`, `${dbPath}-wal`, `${dbPath}-shm`]) {
     if (existsSync(candidate)) rmSync(candidate)
