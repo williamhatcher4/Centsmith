@@ -12,7 +12,7 @@ test('imports a sample statement and shows the new rows in the Inbox', async ({ 
   await page.setInputFiles('input[type="file"]', fixture)
 
   await expect(page.getByText(/import preview/i)).toBeVisible()
-  await expect(page.getByText('Account Activity CSV')).toBeVisible()
+  await expect(page.getByRole('dialog').getByText('Account Activity CSV')).toBeVisible()
   // 5 rows total, 1 payment credit ignored, 4 to import (3 debits + 1 refund credit)
   const importButton = page.getByRole('button', { name: /Import 4/i })
   await expect(importButton).toBeEnabled()
