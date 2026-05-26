@@ -2,12 +2,15 @@ import path from 'node:path'
 import { expect, test } from '@playwright/test'
 import { login } from './helpers'
 
-const fixture = path.resolve(__dirname, '..', 'fixtures', 'sample-statement.csv')
+// Dedicated fixture so this test does not collide with import.spec.ts (which
+// uses sample-statement.csv and expects exactly 4 new rows on import).
+const fixture = path.resolve(__dirname, '..', 'fixtures', 'classify-statement.csv')
+const TARGET = 'Specialty bookstore'
 
 test('classifies an inbox row as personal and categorizes it', async ({ page }) => {
   await login(page)
 
-  // Seed: import the sample statement first (idempotent – handles retry scenario)
+  // Seed: import the dedicated classify statement (idempotent — handles retries)
   await page.goto('/transactions')
   await page.getByRole('button', { name: /^import$/i }).click()
   await page.setInputFiles('input[type="file"]', fixture)
@@ -22,20 +25,17 @@ test('classifies an inbox row as personal and categorizes it', async ({ page }) 
     await page.getByRole('button', { name: /cancel/i }).click()
   }
 
-  // Classify the Coffee shop row as Personal (backend sorts date DESC so it is not row 1)
+  // Classify the target row as Personal (skip if already classified on a retry)
   await page.goto('/inbox')
-  const coffeeShopRow = page.getByRole('row').filter({
-    has: page.getByRole('cell', { name: 'Coffee shop', exact: true }),
-  })
-  if (await coffeeShopRow.count() > 0) {
-    await coffeeShopRow.getByRole('button', { name: /personal/i }).click()
-    // Wait for the mutation to complete (row leaves the unsorted inbox)
-    await expect(coffeeShopRow).not.toBeVisible({ timeout: 10_000 })
+  const targetRow = page.locator('tbody tr').filter({ hasText: TARGET })
+  if ((await targetRow.count()) > 0) {
+    await targetRow.getByRole('button', { name: /personal/i }).click()
+    await expect(targetRow).toHaveCount(0, { timeout: 10_000 })
   }
 
   // Categorize it from the Personal Inbox
   await page.goto('/personal-inbox')
-  await expect(page.getByText('Coffee shop').first()).toBeVisible()
-  await page.getByLabel(/Category for Coffee shop/i).selectOption('Dining')
-  await expect(page.getByText('Coffee shop')).not.toBeVisible({ timeout: 5_000 })
+  await expect(page.getByText(TARGET).first()).toBeVisible({ timeout: 10_000 })
+  await page.getByLabel(new RegExp(`Category for ${TARGET}`, 'i')).selectOption('Dining')
+  await expect(page.getByText(TARGET)).toHaveCount(0, { timeout: 10_000 })
 })
