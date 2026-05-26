@@ -34,6 +34,7 @@ $Desktop = Join-Path $Root "desktop"
 $Python = Join-Path $Backend ".venv\Scripts\python.exe"
 $PyArmor = Join-Path $Backend ".venv\Scripts\pyarmor.exe"
 $BackendOut = Join-Path $Packaging "dist\centsmith-backend"
+$PyArmorDefaultBackendOut = Join-Path $Root "dist\centsmith-backend"
 $ResourceTarget = Join-Path $Desktop "src-tauri\resources\backend"
 
 function Step([string]$Message) {
@@ -63,9 +64,11 @@ try {
 Step "2/4  PyInstaller (backend sidecar)"
 # Force-remove stale dist output first — OneDrive marks some files read-only
 # which causes PyInstaller's own cleanup to fail with PermissionError.
-if (Test-Path $BackendOut) {
-    Get-ChildItem -Recurse $BackendOut | ForEach-Object { $_.Attributes = "Normal" }
-    Remove-Item -Recurse -Force $BackendOut
+foreach ($OutputPath in @($BackendOut, $PyArmorDefaultBackendOut)) {
+    if (Test-Path $OutputPath) {
+        Get-ChildItem -Recurse $OutputPath | ForEach-Object { $_.Attributes = "Normal" }
+        Remove-Item -Recurse -Force $OutputPath
+    }
 }
 & $Python -m pip show pyinstaller > $null 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -102,12 +105,20 @@ if ($ObfuscateBackend) {
 }
 
 Step "3/4  Stage backend bundle into Tauri resources/"
-if (-not (Test-Path $BackendOut)) {
-    throw "Backend bundle output not found at $BackendOut"
+$BackendOutCandidates = @($BackendOut)
+if ($ObfuscateBackend) {
+    # PyArmor's pack mode may invoke PyInstaller without honoring pack:pyi_options
+    # on some CI versions, leaving the bundle in PyInstaller's default root dist/.
+    $BackendOutCandidates += $PyArmorDefaultBackendOut
+}
+$ActualBackendOut = $BackendOutCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $ActualBackendOut) {
+    throw "Backend bundle output not found. Checked: $($BackendOutCandidates -join ', ')"
 }
 if (Test-Path $ResourceTarget) { Remove-Item -Recurse -Force $ResourceTarget }
 New-Item -ItemType Directory -Force -Path $ResourceTarget | Out-Null
-Copy-Item -Recurse -Force -Path (Join-Path $BackendOut "*") -Destination $ResourceTarget
+Write-Host "Staging backend bundle from $ActualBackendOut" -ForegroundColor DarkGray
+Copy-Item -Recurse -Force -Path (Join-Path $ActualBackendOut "*") -Destination $ResourceTarget
 & (Join-Path $Packaging "validate-release-artifacts.ps1") -Path $ResourceTarget
 
 if ($SkipTauri) {
