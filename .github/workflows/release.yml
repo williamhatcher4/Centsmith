@@ -32,6 +32,15 @@ jobs:
       - name: Checkout private source
         uses: actions/checkout@v4
 
+      - name: Validate public release token
+        shell: pwsh
+        env:
+          PUBLIC_RELEASES_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PUBLIC_RELEASES_TOKEN)) {
+            throw "PUBLIC_RELEASES_TOKEN secret is missing. Add it to this private source repo's Actions secrets. It must be a token that can create releases and upload assets in williamhatcher4/centsmith_releases."
+          }
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
