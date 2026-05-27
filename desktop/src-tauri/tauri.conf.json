@@ -59,7 +59,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZBMjFEMDY1MjEyRjcwMjAKUldRZ2NDOGhaZEFoK3NNWDk5QVZ6ZTNTSnFiU2xpdmZQZGlJOXRnWkRRQ3dpZTRaOVRVeng5ei8K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENDOTgzQTMwNkREMzMzNjUKUldSbE05TnRNRHFZekVtdmUvQ2tORHZjVURYQ1YyWkdnMkVIWWhGM1JjeFhVdHZFMHZ0Y0ZhMHYK",
       "endpoints": [
         "https://github.com/williamhatcher4/centsmith_releases/releases/latest/download/latest.json"
       ],

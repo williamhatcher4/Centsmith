@@ -81,6 +81,7 @@ DEBUG.md
 AI-Context/
 AGENTS.md
 CLAUDE.md
+commands_to_run_tests.md
 
 # Loose data files dropped in the repo root (statements, exports, etc.)
 /*.csv
