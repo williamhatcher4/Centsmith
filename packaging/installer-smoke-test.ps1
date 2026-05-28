@@ -16,26 +16,101 @@ if (-not $installer) {
 }
 Write-Host "Installer: $($installer.FullName)"
 
-$installRoot = Join-Path $env:LOCALAPPDATA "Programs\Centsmith"
 $runtimeFile = Join-Path $env:APPDATA "Centsmith\runtime.json"
 $shellLog = Join-Path $env:APPDATA "Centsmith\shell.log"
+
+function Get-CentsmithInstallRoots {
+  $roots = New-Object System.Collections.Generic.List[string]
+
+  $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+  foreach ($path in @(
+      (Join-Path $env:LOCALAPPDATA "Programs\Centsmith"),
+      (Join-Path $env:ProgramFiles "Centsmith"),
+      $(if ($programFilesX86) { Join-Path $programFilesX86 "Centsmith" })
+    )) {
+    if (-not [string]::IsNullOrWhiteSpace($path)) {
+      $roots.Add($path)
+    }
+  }
+
+  foreach ($registryRoot in @(
+      "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+      "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+      "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )) {
+    Get-ItemProperty -Path $registryRoot -ErrorAction SilentlyContinue |
+      Where-Object { $_.DisplayName -eq "Centsmith" -and -not [string]::IsNullOrWhiteSpace($_.InstallLocation) } |
+      ForEach-Object { $roots.Add($_.InstallLocation) }
+  }
+
+  $roots | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+}
+
+function Find-InstalledBackend {
+  param([string[]]$InstallRoots)
+
+  foreach ($root in $InstallRoots) {
+    if (-not (Test-Path -LiteralPath $root)) {
+      Write-Host "Install root candidate not found: $root"
+      continue
+    }
+    Write-Host "Searching install root: $root"
+    $backend = Get-ChildItem -Path $root -Filter "centsmith-backend.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($backend) {
+      return $backend
+    }
+  }
+
+  return $null
+}
+
+function Write-InstallDiagnostics {
+  param([string[]]$InstallRoots)
+
+  Write-Host "Install root candidates checked:"
+  foreach ($root in $InstallRoots) {
+    Write-Host "  $root exists=$(Test-Path -LiteralPath $root)"
+  }
+
+  $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+  foreach ($parent in @(
+      (Join-Path $env:LOCALAPPDATA "Programs"),
+      $env:ProgramFiles,
+      $programFilesX86
+    )) {
+    if ([string]::IsNullOrWhiteSpace($parent) -or -not (Test-Path -LiteralPath $parent)) {
+      continue
+    }
+    Write-Host "Centsmith-like entries under ${parent}:"
+    Get-ChildItem -LiteralPath $parent -Directory -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -like "*Centsmith*" } |
+      ForEach-Object { Write-Host "  $($_.FullName)" }
+  }
+}
 
 # Clear any stale runtime metadata so we wait on this run's signal.
 Remove-Item -ErrorAction SilentlyContinue $runtimeFile, $shellLog
 
-# NSIS /S = silent install. /currentuser scope used by Tauri's default config
-# places the install under %LOCALAPPDATA%\Programs.
+# NSIS /S = silent install. /currentuser keeps the CI install under the runner
+# profile when the installer supports per-user mode; discovery below still
+# handles per-machine fallbacks.
 Write-Host "Installing silently..."
-$installProc = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait -PassThru
+$installProc = Start-Process -FilePath $installer.FullName -ArgumentList "/S", "/currentuser" -Wait -PassThru
 if ($installProc.ExitCode -ne 0) {
   throw "Installer exited with code $($installProc.ExitCode)"
 }
 
-$installedBackend = Get-ChildItem -Path $installRoot -Filter "centsmith-backend.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+$installRoots = @(Get-CentsmithInstallRoots)
+$installedBackend = Find-InstalledBackend -InstallRoots $installRoots
 if (-not $installedBackend) {
-  throw "centsmith-backend.exe not found under $installRoot after install"
+  Write-InstallDiagnostics -InstallRoots $installRoots
+  throw "centsmith-backend.exe not found after install"
 }
 Write-Host "Bundled backend: $($installedBackend.FullName)"
+$installRoot = $installRoots |
+  Where-Object { $installedBackend.FullName.StartsWith($_, [System.StringComparison]::OrdinalIgnoreCase) } |
+  Sort-Object Length -Descending |
+  Select-Object -First 1
 
 # Launch the backend directly so the Tauri shell does not race us to read
 # (and then delete) runtime.json.
@@ -59,7 +134,7 @@ try {
   $healthy = $false
   while ((Get-Date) -lt $healthDeadline) {
     try {
-      $resp = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -TimeoutSec 5
+      $resp = Invoke-RestMethod -Uri "http://127.0.0.1:${port}/health" -TimeoutSec 5
       if ($resp.status -eq "ok") {
         $healthy = $true
         break
@@ -79,12 +154,21 @@ try {
 
 # Find and run the uninstaller. Tauri's NSIS template installs Uninstall.exe
 # at the install root.
-$uninstaller = Join-Path $installRoot "uninstall.exe"
-if (-not (Test-Path $uninstaller)) {
-  $uninstaller = (Get-ChildItem -Path $installRoot -Filter "uninstall*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1)?.FullName
+$uninstaller = $null
+if ($installRoot) {
+  $candidate = Join-Path $installRoot "uninstall.exe"
+  if (Test-Path -LiteralPath $candidate) {
+    $uninstaller = $candidate
+  }
+}
+if (-not $uninstaller -and $installRoot) {
+  $uninstallerMatch = Get-ChildItem -Path $installRoot -Filter "uninstall*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($uninstallerMatch) {
+    $uninstaller = $uninstallerMatch.FullName
+  }
 }
 if (-not $uninstaller) {
-  Write-Warning "Uninstaller not found under $installRoot — install verified but uninstall not exercised."
+  Write-Warning "Uninstaller not found after install verified; uninstall not exercised."
   exit 0
 }
 Write-Host "Uninstalling silently..."
