@@ -1,20 +1,22 @@
 ﻿import { useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, Upload } from 'lucide-react'
+import { importsApi } from '../api/imports'
 import { transactionsApi } from '../api/transactions'
-import type { ImportPreview } from '../types'
+import type { ImportPreview, ImportResult } from '../types'
 import { cn } from '../utils/cn'
-import { Badge, Button, Modal } from './ui'
+import { Badge, Button, Modal, useToast } from './ui'
 import { repeatGroupInfo, signedMoney } from './ImportModal.helpers'
 
 type ImportMode = 'card' | 'checking'
 
 export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; mode?: ImportMode }) {
   const qc = useQueryClient()
+  const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
-  const [result, setResult] = useState<{ imported: number; skipped: number; ignored_credits: number; skipped_errors: number } | null>(null)
+  const [result, setResult] = useState<ImportResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
@@ -52,6 +54,14 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
     }
   }
 
+  function invalidateImportQueries() {
+    qc.invalidateQueries({ queryKey: ['transactions'] })
+    qc.invalidateQueries({ queryKey: ['dashboard'] })
+    qc.invalidateQueries({ queryKey: ['spending'] })
+    qc.invalidateQueries({ queryKey: ['income'] })
+    qc.invalidateQueries({ queryKey: ['imports'] })
+  }
+
   async function confirm() {
     if (!file) return
     setLoading(true)
@@ -61,10 +71,25 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
         ? await transactionsApi.confirmCheckingImport(file)
         : await transactionsApi.confirmImport(file)
       setResult(next)
-      qc.invalidateQueries({ queryKey: ['transactions'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
-      qc.invalidateQueries({ queryKey: ['spending'] })
-      qc.invalidateQueries({ queryKey: ['income'] })
+      invalidateImportQueries()
+      if (next.imported > 0 && next.batch_id) {
+        const batchId = next.batch_id
+        const imported = next.imported
+        toast.success(`Imported ${imported} transaction${imported === 1 ? '' : 's'}.`, {
+          action: {
+            label: 'Undo',
+            onClick: async () => {
+              try {
+                await importsApi.deleteBatch(batchId)
+                invalidateImportQueries()
+                toast.success('Import undone.')
+              } catch (err) {
+                toast.error((err as Error).message || 'Undo failed')
+              }
+            },
+          },
+        })
+      }
     } catch (err) {
       setError((err as Error).message)
     } finally {

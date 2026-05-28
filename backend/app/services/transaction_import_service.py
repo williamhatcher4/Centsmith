@@ -1,8 +1,11 @@
+import uuid
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
+from app.models.import_batch import ImportBatch
 from app.models.transaction import Transaction
 from app.schemas.transaction import ImportPreview, ImportPreviewRow, ImportResult
 from app.services.statement_import_service import ParsedRow, parse_statement
@@ -89,6 +92,18 @@ def confirm_import(db: Session, raw: bytes, filename: str, source: ImportSource)
     existing = _existing_hashes(db, import_rows)
     imported = skipped = 0
 
+    batch_id = str(uuid.uuid4())
+    batch = ImportBatch(
+        id=batch_id,
+        filename=filename or ("checking.csv" if source == "checking" else "statement.csv"),
+        statement_format=fmt,
+        imported_at=datetime.now(timezone.utc),
+        row_count=0,
+        created_by_action="import",
+    )
+    db.add(batch)
+    db.flush()
+
     for row in import_rows:
         if row.source_hash in existing:
             skipped += 1
@@ -102,14 +117,28 @@ def confirm_import(db: Session, raw: bytes, filename: str, source: ImportSource)
             expensed=False,
             statement_format=fmt,
             source_hash=row.source_hash,
+            import_batch_id=batch_id,
         ))
         existing.add(row.source_hash)
         imported += 1
 
+    if imported == 0:
+        db.delete(batch)
+        db.commit()
+        return ImportResult(
+            imported=imported,
+            skipped=skipped,
+            ignored_credits=ignored_credits,
+            skipped_errors=skipped_errors,
+            batch_id=None,
+        )
+
+    batch.row_count = imported
     db.commit()
     return ImportResult(
         imported=imported,
         skipped=skipped,
         ignored_credits=ignored_credits,
         skipped_errors=skipped_errors,
+        batch_id=batch_id,
     )

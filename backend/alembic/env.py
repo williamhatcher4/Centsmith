@@ -6,7 +6,7 @@ from sqlalchemy import engine_from_config, pool
 from app.config import settings
 from app.database import Base
 # Side-effect imports: load model modules so their tables register on Base.metadata.
-from app.models import transaction, user  # noqa: F401
+from app.models import import_batch, transaction, user, user_settings  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

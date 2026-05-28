@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 from typing import Optional
-from sqlalchemy import Boolean, Date, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -21,7 +21,11 @@ class Transaction(Base):
     classification: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # personal | work | null
     personal_category: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     expensed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_manual: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     statement_format: Mapped[Optional[str]] = mapped_column(String(80))
     source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    import_batch_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("import_batches.id", ondelete="SET NULL"), nullable=True
+    )
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

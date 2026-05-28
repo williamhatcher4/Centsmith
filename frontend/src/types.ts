@@ -18,8 +18,19 @@ export interface Transaction {
   classification: Classification | null
   personal_category: string | null
   expensed: boolean
+  is_manual: boolean
   statement_format: string | null
   imported_at: string
+}
+
+export interface TransactionCreatePayload {
+  transaction_date: string
+  description: string
+  amount_cents: number
+  transaction_type: TransactionType
+  classification?: Classification | null
+  personal_category?: string | null
+  expensed?: boolean
 }
 
 export interface ImportPreviewRow {
@@ -46,6 +57,22 @@ export interface ImportResult {
   skipped: number
   ignored_credits: number
   skipped_errors: number
+  batch_id: string | null
+}
+
+export interface ImportBatch {
+  id: string
+  filename: string
+  statement_format: string | null
+  imported_at: string
+  row_count: number
+  created_by_action: string
+}
+
+export interface ImportBatchDeleteResult {
+  removed_rows: number
+  classified_rows: number
+  categorized_rows: number
 }
 
 export interface SpendingSummary {
@@ -73,6 +100,11 @@ export interface DashboardMonth {
   work_cents: number
   income_cents: number
   reimbursement_cents: number
+}
+
+export interface UserSettings {
+  personal_categories: string[]
+  hidden_pages: string[]
 }
 
 export interface DashboardSummary {

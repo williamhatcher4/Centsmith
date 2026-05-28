@@ -30,6 +30,7 @@ backend/.env.*
 e2e/node_modules/
 e2e/test-results/
 e2e/playwright-report/
+.playwright/
 
 # Runtime logs and local metadata
 *.log
@@ -39,6 +40,7 @@ runtime.json
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/coverage/
 frontend/.env
 frontend/.env.*
 
@@ -90,3 +92,4 @@ commands_to_run_tests.md
 
 #vault
 .obsidian/
+*.canvas

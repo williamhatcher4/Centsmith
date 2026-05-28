@@ -1,4 +1,8 @@
 export { ThemeProvider } from './ThemeProvider'
+export { ToastProvider, useToast } from './Toaster'
+export type { ToastAction, ToastContextValue } from './Toaster'
+export { ConfirmDialogProvider, useConfirm } from './ConfirmDialog'
+export type { ConfirmOptions } from './ConfirmDialog'
 export { useTheme } from './theme'
 export type { Theme } from './theme'
 export { ThemeToggle } from './ThemeToggle'
