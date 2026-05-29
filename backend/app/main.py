@@ -10,6 +10,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import settings
 from app.migrations import run_migrations
 from app.routers import auth, desktop, transactions
+from app.routers import imports as imports_router
+from app.routers import settings as settings_router
 
 
 def _frontend_dist_dir() -> Path:
@@ -36,6 +38,8 @@ app.add_middleware(
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.include_router(desktop.router)
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(settings_router.router, prefix="/api/v1")
+app.include_router(imports_router.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 
 

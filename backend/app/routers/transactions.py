@@ -1,5 +1,6 @@
 import csv
 import io
+import uuid
 from datetime import datetime, timezone, date
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
@@ -7,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
+from app.models.import_batch import ImportBatch
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.transaction import (
@@ -21,6 +23,7 @@ from app.schemas.transaction import (
     SpendingByCategory,
     SpendingPoint,
     SpendingSummary,
+    TransactionCreate,
     TransactionOut,
     TransactionUpdate,
 )
@@ -66,6 +69,62 @@ def _validate_personal_category(category: Optional[str], tx_type: str) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Income/Reimbursement categories only apply to credit transactions",
         )
+
+
+@router.post("/manual", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
+def create_manual_transaction(
+    payload: TransactionCreate,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if payload.personal_category is not None:
+        payload.personal_category = payload.personal_category.strip() or None
+    if payload.personal_category:
+        _validate_personal_category(payload.personal_category, payload.transaction_type)
+    if payload.expensed and payload.classification != "work":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only work transactions can be marked as expensed")
+    if payload.personal_category and payload.classification != "personal":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only personal transactions can have a personal category")
+    tx = Transaction(
+        transaction_date=payload.transaction_date,
+        description=payload.description,
+        amount_cents=payload.amount_cents,
+        transaction_type=payload.transaction_type,
+        classification=payload.classification,
+        personal_category=payload.personal_category,
+        expensed=payload.expensed,
+        is_manual=True,
+        statement_format=None,
+        source_hash=f"manual:{uuid.uuid4()}",
+    )
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
+@router.delete("/{tx_id}", response_model=TransactionOut)
+def delete_transaction(
+    tx_id: int,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
+    if not tx:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+    batch_id = tx.import_batch_id
+    db.delete(tx)
+    db.flush()
+    if batch_id:
+        remaining = db.query(Transaction).filter(Transaction.import_batch_id == batch_id).count()
+        batch = db.query(ImportBatch).filter(ImportBatch.id == batch_id).first()
+        if batch:
+            if remaining:
+                batch.row_count = remaining
+            else:
+                db.delete(batch)
+    db.commit()
+    return tx
 
 
 @router.get("", response_model=list[TransactionOut])

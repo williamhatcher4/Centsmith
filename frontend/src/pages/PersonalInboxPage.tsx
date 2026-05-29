@@ -6,28 +6,7 @@ import type { Transaction } from '../types'
 import { formatMoney } from '../utils/money'
 import { cn } from '../utils/cn'
 import { Button, Card, Empty, Field, Input, PageHeader, Select, Skeleton, StatCard } from '../components/ui'
-
-const SPENDING_CATEGORIES = [
-  'Groceries',
-  'Dining',
-  'Transportation',
-  'Home',
-  'Health',
-  'Subscriptions',
-  'Shopping',
-  'Travel',
-  'Entertainment',
-  'Personal Care',
-  'Gifts',
-  'Other',
-  'Transfer',
-]
-const INCOME_CATEGORIES = ['Income', 'Reimbursement']
-const CREDIT_CATEGORIES = [...INCOME_CATEGORIES, ...SPENDING_CATEGORIES]
-
-function categoriesFor(tx: Transaction) {
-  return tx.transaction_type === 'credit' ? CREDIT_CATEGORIES : SPENDING_CATEGORIES
-}
+import { useCategories } from '../hooks/useCategories'
 
 function fmtDate(d: string) {
   return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -45,6 +24,7 @@ export function PersonalInboxPage() {
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const qc = useQueryClient()
+  const { spending: spendingCategories, credit: creditCategories, categoriesFor } = useCategories()
 
   const { data: transactions = [], isLoading } = useQuery({
     queryKey: ['transactions', 'personal', 'uncategorized'],
@@ -65,9 +45,9 @@ export function PersonalInboxPage() {
     selected.length === 0 ? null : selectedTypes.size === 1 ? ([...selectedTypes][0] as 'credit' | 'debit') : 'mixed'
   const bulkCategoryOptions =
     selectionType === 'credit'
-      ? CREDIT_CATEGORIES
+      ? creditCategories
       : selectionType === 'debit'
-        ? SPENDING_CATEGORIES
+        ? spendingCategories
         : selectionType === 'mixed'
           ? ['Transfer']
           : []

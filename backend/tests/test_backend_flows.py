@@ -215,7 +215,9 @@ def test_import_preview_and_confirm_ignore_card_payment_credits(client, db_sessi
         ["2026-05-02", "PAYMENT - THANK YOU", "", "100.00"],
     ]))
     assert confirm.status_code == 200
-    assert confirm.json() == {"imported": 1, "skipped": 0, "ignored_credits": 1, "skipped_errors": 0}
+    body = confirm.json()
+    assert {k: body[k] for k in ("imported", "skipped", "ignored_credits", "skipped_errors")} == {"imported": 1, "skipped": 0, "ignored_credits": 1, "skipped_errors": 0}
+    assert body["batch_id"] is not None
 
     stored = db_session.query(Transaction).all()
     assert len(stored) == 1
@@ -249,7 +251,9 @@ def test_duplicate_import_reports_skipped_debits_separately_from_payments(client
     ]))
 
     assert duplicate.status_code == 200
-    assert duplicate.json() == {"imported": 0, "skipped": 1, "ignored_credits": 1, "skipped_errors": 0}
+    body = duplicate.json()
+    assert {k: body[k] for k in ("imported", "skipped", "ignored_credits", "skipped_errors")} == {"imported": 0, "skipped": 1, "ignored_credits": 1, "skipped_errors": 0}
+    assert body["batch_id"] is None
 
 
 def test_import_keeps_refund_credits_but_drops_payment_credits(client, db_session):
@@ -262,7 +266,8 @@ def test_import_keeps_refund_credits_but_drops_payment_credits(client, db_sessio
 
     confirm = client.post("/api/v1/transactions/import/confirm", files=files)
     assert confirm.status_code == 200
-    assert confirm.json() == {"imported": 2, "skipped": 0, "ignored_credits": 1, "skipped_errors": 0}
+    body = confirm.json()
+    assert {k: body[k] for k in ("imported", "skipped", "ignored_credits", "skipped_errors")} == {"imported": 2, "skipped": 0, "ignored_credits": 1, "skipped_errors": 0}
 
     stored = db_session.query(Transaction).order_by(Transaction.transaction_date).all()
     assert [(tx.description, tx.transaction_type) for tx in stored] == [
@@ -287,7 +292,8 @@ def test_payment_match_does_not_catch_substring(client, db_session):
         ["2026-05-01", "PAYMENT TO VENDOR - THANK YOU", "", "100.00"],
     ])
     confirm = client.post("/api/v1/transactions/import/confirm", files=files)
-    assert confirm.json() == {"imported": 1, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
+    body = confirm.json()
+    assert {k: body[k] for k in ("imported", "skipped", "ignored_credits", "skipped_errors")} == {"imported": 1, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
     stored = db_session.query(Transaction).one()
     assert stored.transaction_type == "credit"
 
@@ -434,7 +440,8 @@ def test_legitimately_duplicate_rows_in_one_file_are_both_imported(client, db_se
     ])
     response = client.post("/api/v1/transactions/import/confirm", files=files)
     assert response.status_code == 200
-    assert response.json() == {"imported": 2, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
+    body = response.json()
+    assert {k: body[k] for k in ("imported", "skipped", "ignored_credits", "skipped_errors")} == {"imported": 2, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
 
     stored = db_session.query(Transaction).filter(Transaction.description == "Coffee").all()
     assert len(stored) == 2
@@ -453,7 +460,8 @@ def test_overlap_import_with_legitimate_duplicate_imports_only_new_occurrence(cl
         ["2026-05-01", "Coffee", "4.25", ""],
     ]))
     assert second.status_code == 200
-    assert second.json() == {"imported": 1, "skipped": 1, "ignored_credits": 0, "skipped_errors": 0}
+    body = second.json()
+    assert {k: body[k] for k in ("imported", "skipped", "ignored_credits", "skipped_errors")} == {"imported": 1, "skipped": 1, "ignored_credits": 0, "skipped_errors": 0}
     assert db_session.query(Transaction).filter(Transaction.description == "Coffee").count() == 2
 
 
@@ -842,7 +850,8 @@ def test_checking_import_confirm_assigns_personal_classification(client, db_sess
     ])
     response = client.post("/api/v1/transactions/import/checking/confirm", files=files)
     assert response.status_code == 200
-    assert response.json() == {"imported": 2, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
+    body = response.json()
+    assert {k: body[k] for k in ("imported", "skipped", "ignored_credits", "skipped_errors")} == {"imported": 2, "skipped": 0, "ignored_credits": 0, "skipped_errors": 0}
 
     stored = db_session.query(Transaction).order_by(Transaction.transaction_date).all()
     assert all(tx.classification == "personal" for tx in stored)

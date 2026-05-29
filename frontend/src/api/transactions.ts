@@ -1,5 +1,5 @@
 ﻿import { api } from './client'
-import type { Classification, ClassificationFilter, DashboardSummary, ExpensedFilter, ImportPreview, ImportResult, SpendingSummary, Transaction } from '../types'
+import type { Classification, ClassificationFilter, DashboardSummary, ExpensedFilter, ImportPreview, ImportResult, SpendingSummary, Transaction, TransactionCreatePayload } from '../types'
 
 export interface TransactionFilters {
   classification?: ClassificationFilter
@@ -24,6 +24,8 @@ function qs(filters: TransactionFilters) {
 export const transactionsApi = {
   list: (filters: TransactionFilters = {}) => api.get<Transaction[]>(`/api/v1/transactions${qs(filters)}`),
   update: (id: number, data: Partial<Pick<Transaction, 'classification' | 'personal_category' | 'description' | 'transaction_date' | 'expensed'>>) => api.put<Transaction>(`/api/v1/transactions/${id}`, data),
+  createManual: (data: TransactionCreatePayload) => api.post<Transaction>('/api/v1/transactions/manual', data),
+  deleteTransaction: (id: number) => api.delete<Transaction>(`/api/v1/transactions/${id}`),
   bulkClassify: (transactionIds: number[], classification: Classification) => api.post<{ updated: number }>('/api/v1/transactions/bulk-classify', { transaction_ids: transactionIds, classification }),
   bulkCategorizePersonal: (transactionIds: number[], personalCategory: string) =>
     api.post<{ updated: number }>('/api/v1/transactions/bulk-categorize-personal', {

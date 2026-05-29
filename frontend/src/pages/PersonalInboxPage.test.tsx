@@ -16,6 +16,7 @@ const personalDebit: Transaction = {
   classification: 'personal',
   personal_category: null,
   expensed: false,
+  is_manual: false,
   statement_format: 'test',
   imported_at: '2026-05-01T12:00:00Z',
 }

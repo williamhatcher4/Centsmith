@@ -1,19 +1,12 @@
-﻿import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BarChart3, Download, Inbox, LogOut, ReceiptText, Tags, TrendingDown } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { LogOut } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { authApi } from '../api/auth'
+import { settingsApi } from '../api/settings'
 import { useAppStore } from '../store/useAppStore'
 import { Avatar, IconButton, ThemeToggle } from './ui'
 import { cn } from '../utils/cn'
-
-const links: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: '/', label: 'Dashboard', icon: BarChart3 },
-  { to: '/inbox', label: 'Inbox', icon: Inbox },
-  { to: '/personal-inbox', label: 'Personal Inbox', icon: Tags },
-  { to: '/transactions', label: 'Transactions', icon: ReceiptText },
-  { to: '/spending', label: 'Spending', icon: TrendingDown },
-  { to: '/exports', label: 'Exports', icon: Download },
-]
+import { NAV_LINKS, visibleLinks } from '../constants/nav'
 
 function BrandMark() {
   return <span className="flex size-8 items-center justify-center rounded-[8px] bg-[var(--accent)] text-sm font-black text-white">CS</span>
@@ -22,11 +15,24 @@ function BrandMark() {
 export function AppShell() {
   const { user, setUser } = useAppStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.get(),
+    staleTime: 60_000,
+  })
+  const hiddenPages = settings?.hidden_pages ?? []
+  const links = visibleLinks(hiddenPages)
 
   async function logout() {
     await authApi.logout()
     setUser(null)
     navigate('/login')
+  }
+
+  if (hiddenPages.includes(location.pathname)) {
+    const fallback = links[0]?.to ?? NAV_LINKS[0].to
+    return <Navigate to={fallback} replace />
   }
 
   return (
@@ -72,7 +78,11 @@ export function AppShell() {
         <main className="flex-1 px-4 py-6 md:px-8 lg:px-10">
           <div className="mx-auto max-w-[1180px]"><Outlet /></div>
         </main>
-        <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-[var(--border)] bg-[var(--surface-strong)] pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-xl md:hidden">
+        <nav
+          className="fixed inset-x-0 bottom-0 z-40 grid border-t border-[var(--border)] bg-[var(--surface-strong)] pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-xl md:hidden"
+          style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}
+          aria-label="Primary mobile"
+        >
           {links.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => cn('flex flex-col items-center gap-1 px-1 py-2 text-[10px] font-semibold', isActive ? 'text-[var(--accent)]' : 'text-[var(--text-subtle)]')}>
               <Icon className="size-5" />

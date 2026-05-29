@@ -23,10 +23,21 @@ class TransactionOut(BaseModel):
     classification: Optional[Classification]
     personal_category: Optional[str]
     expensed: bool
+    is_manual: bool
     statement_format: Optional[str]
     imported_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TransactionCreate(BaseModel):
+    transaction_date: date
+    description: str
+    amount_cents: int
+    transaction_type: TransactionType
+    classification: Optional[Classification] = None
+    personal_category: Optional[str] = None
+    expensed: bool = False
 
 
 class TransactionUpdate(BaseModel):
@@ -109,6 +120,24 @@ class ImportResult(BaseModel):
     skipped: int
     ignored_credits: int
     skipped_errors: int = 0
+    batch_id: Optional[str] = None
+
+
+class ImportBatchOut(BaseModel):
+    id: str
+    filename: str
+    statement_format: Optional[str]
+    imported_at: datetime
+    row_count: int
+    created_by_action: str
+
+    model_config = {"from_attributes": True}
+
+
+class ImportBatchDeleteResult(BaseModel):
+    removed_rows: int
+    classified_rows: int
+    categorized_rows: int
 
 
 class SpendingPoint(BaseModel):
