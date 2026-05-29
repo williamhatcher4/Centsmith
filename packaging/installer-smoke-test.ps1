@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Resolve-Path "$PSScriptRoot\.."
 $BundleDir = Join-Path $RepoRoot "desktop\src-tauri\target\release\bundle\nsis"
+. (Join-Path $PSScriptRoot "installer-smoke-lib.ps1")
 
 $installer = Get-ChildItem -Path $BundleDir -Filter "*.exe" -ErrorAction Stop | Select-Object -First 1
 if (-not $installer) {
@@ -18,33 +19,6 @@ Write-Host "Installer: $($installer.FullName)"
 
 $runtimeFile = Join-Path $env:APPDATA "Centsmith\runtime.json"
 $shellLog = Join-Path $env:APPDATA "Centsmith\shell.log"
-
-function Get-CentsmithInstallRoots {
-  $roots = New-Object System.Collections.Generic.List[string]
-
-  $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
-  foreach ($path in @(
-      (Join-Path $env:LOCALAPPDATA "Programs\Centsmith"),
-      (Join-Path $env:ProgramFiles "Centsmith"),
-      $(if ($programFilesX86) { Join-Path $programFilesX86 "Centsmith" })
-    )) {
-    if (-not [string]::IsNullOrWhiteSpace($path)) {
-      $roots.Add($path)
-    }
-  }
-
-  foreach ($registryRoot in @(
-      "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
-      "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
-      "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    )) {
-    Get-ItemProperty -Path $registryRoot -ErrorAction SilentlyContinue |
-      Where-Object { $_.DisplayName -eq "Centsmith" -and -not [string]::IsNullOrWhiteSpace($_.InstallLocation) } |
-      ForEach-Object { $roots.Add($_.InstallLocation) }
-  }
-
-  $roots | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
-}
 
 function Find-InstalledBackend {
   param([string[]]$InstallRoots)
@@ -74,6 +48,7 @@ function Write-InstallDiagnostics {
 
   $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
   foreach ($parent in @(
+      $env:LOCALAPPDATA,
       (Join-Path $env:LOCALAPPDATA "Programs"),
       $env:ProgramFiles,
       $programFilesX86
