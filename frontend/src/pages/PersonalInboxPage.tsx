@@ -16,6 +16,11 @@ function signedMoney(tx: Transaction) {
   return `${tx.transaction_type === 'credit' ? '+' : '-'}${formatMoney(tx.amount_cents)}`
 }
 
+function rowDelay(i: number) {
+  return i < 16 ? { animationDelay: `${Math.min(i, 12) * 25}ms` } : undefined
+}
+const ROW_ANIM = 'animate-[fadeInUp_360ms_var(--ease-out)_both]'
+
 export function PersonalInboxPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkCategory, setBulkCategory] = useState('')
@@ -110,10 +115,10 @@ export function PersonalInboxPage() {
 
   return (
     <div>
-      <PageHeader title="Personal Inbox" subtitle="Categorize personal spending after it has been sorted from the main inbox" />
+      <PageHeader eyebrow="Categorize" title="Personal Inbox" subtitle="Categorize personal spending after it has been sorted from the main inbox" />
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Open personal items" value={String(transactions.length)} icon={<Tags className="size-4" />} />
-        <StatCard label="Uncategorized total" value={formatMoney(total)} />
+        <StatCard label="Open personal items" value={String(transactions.length)} animateTo={transactions.length} icon={<Tags className="size-4" />} />
+        <StatCard label="Uncategorized total" value={formatMoney(total)} animateTo={total} format={(n) => formatMoney(Math.round(n))} gradient />
         <StatCard label="Selected" value={String(selected.length)} tone={selected.length ? 'accent' : 'neutral'} />
       </div>
 
@@ -147,7 +152,7 @@ export function PersonalInboxPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[var(--border)] text-left text-xs font-semibold uppercase text-[var(--text-subtle)]">
+                <tr className="border-b border-[var(--border-strong)] bg-[var(--surface-muted)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">
                   <th className="w-1 px-4 py-3"><input type="checkbox" className="size-4 accent-[var(--accent)]" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={toggleAll} /></th>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Description</th>
@@ -156,10 +161,10 @@ export function PersonalInboxPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((tx) => {
+                {filtered.map((tx, i) => {
                   const category = categoryById[tx.id] ?? ''
                   return (
-                    <tr key={tx.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-muted)]">
+                    <tr key={tx.id} className={cn('border-b border-[var(--border)] transition-colors duration-150 last:border-0 hover:bg-[var(--surface-muted)]', i < 16 && ROW_ANIM)} style={rowDelay(i)}>
                       <td className="px-4 py-3"><input type="checkbox" className="size-4 accent-[var(--accent)]" checked={selectedIds.has(tx.id)} onChange={() => toggle(tx.id)} /></td>
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--text-subtle)]">{fmtDate(tx.transaction_date)}</td>
                       <td className="px-4 py-3 font-medium">{tx.description}</td>

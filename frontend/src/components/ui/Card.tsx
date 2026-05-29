@@ -6,6 +6,10 @@ type CardVariant = 'glass' | 'solid' | 'muted'
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   variant?: CardVariant
   padding?: 'none' | 'sm' | 'md' | 'lg'
+  /** Hover lift + glow + subtle press feedback (for clickable cards). */
+  interactive?: boolean
+  /** Resting colored glow shadow. */
+  glow?: boolean
 }
 
 const variants: Record<CardVariant, string> = {
@@ -13,8 +17,7 @@ const variants: Record<CardVariant, string> = {
     'bg-[var(--surface)] backdrop-blur-xl backdrop-saturate-150 border border-[var(--border)] shadow-[var(--shadow-md)]',
   solid:
     'bg-[var(--surface-solid)] border border-[var(--border)] shadow-[var(--shadow-sm)]',
-  muted:
-    'bg-[var(--surface-muted)] border border-[var(--border)]',
+  muted: 'bg-[var(--surface-muted)] border border-[var(--border)]',
 }
 
 const padMap = {
@@ -27,13 +30,25 @@ const padMap = {
 export function Card({
   variant = 'glass',
   padding = 'md',
+  interactive,
+  glow,
   className,
   children,
   ...rest
 }: CardProps) {
   return (
     <div
-      className={cn('rounded-[var(--radius-lg)]', variants[variant], padMap[padding], className)}
+      className={cn(
+        'rounded-[var(--radius-lg)]',
+        variants[variant],
+        padMap[padding],
+        glow && 'shadow-[var(--shadow-glow)]',
+        interactive &&
+          'transition-[transform,box-shadow,border-color] duration-200 ease-[var(--ease-out)] ' +
+            'hover:-translate-y-0.5 hover:border-[var(--accent-ring)] hover:shadow-[var(--shadow-glow)] ' +
+            'active:translate-y-0 active:scale-[0.995] cursor-pointer',
+        className,
+      )}
       {...rest}
     >
       {children}
@@ -55,10 +70,8 @@ export function CardHeader({
   return (
     <div className={cn('mb-4 flex items-start justify-between gap-3', className)}>
       <div className="min-w-0">
-        <h2 className="text-base font-semibold text-[var(--text)] leading-tight">{title}</h2>
-        {subtitle && (
-          <p className="mt-0.5 text-xs text-[var(--text-subtle)]">{subtitle}</p>
-        )}
+        <h2 className="text-base font-semibold leading-tight text-[var(--text)]">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-xs text-[var(--text-subtle)]">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>

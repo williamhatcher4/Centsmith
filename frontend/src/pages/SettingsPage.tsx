@@ -138,13 +138,13 @@ function DeleteCategoryModal({
   const inUse = state.usageCount > 0
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-md animate-[fadeIn_200ms_var(--ease-out)]" onClick={onCancel} />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`Delete ${state.name}`}
-        className="relative w-full max-w-md rounded-[var(--radius-xl)] border border-[var(--border-strong)] bg-[var(--surface-strong)] p-5 shadow-[var(--shadow-lg)]"
+        className="relative w-full max-w-md rounded-[var(--radius-xl)] border border-[var(--border-strong)] bg-[var(--surface-strong)] p-5 shadow-[var(--shadow-lg)] ring-1 ring-inset ring-white/10 backdrop-blur-2xl animate-[slideUp_280ms_var(--ease-drawer)]"
       >
         <h2 className="text-lg font-semibold text-[var(--text)]">Delete &ldquo;{state.name}&rdquo;?</h2>
         {inUse ? (
@@ -333,7 +333,7 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" subtitle="Customize categories and other preferences" />
+      <PageHeader eyebrow="Preferences" title="Settings" subtitle="Customize categories and other preferences" />
       <Card padding="md" className="mb-6">
         <CardHeader
           title="Personal categories"

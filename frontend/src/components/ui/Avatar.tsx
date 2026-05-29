@@ -12,8 +12,8 @@ export function Avatar({ name, size = 'md', className }: { name?: string; size?:
     <div
       aria-hidden="true"
       className={cn(
-        'inline-flex items-center justify-center rounded-full font-semibold',
-        'bg-gradient-to-br from-[var(--accent)] to-[var(--chart-5,_#EC4899)] text-white',
+        'inline-flex items-center justify-center rounded-full font-bold text-white',
+        'bg-[image:var(--grad-vivid)] shadow-[var(--shadow-sm)] ring-2 ring-white/20',
         size === 'sm' ? 'size-7 text-[11px]' : 'size-9 text-xs',
         className,
       )}

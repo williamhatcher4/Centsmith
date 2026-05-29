@@ -4,7 +4,8 @@ import { cn } from '../../utils/cn'
 const fieldBase =
   'block w-full rounded-[var(--radius-sm)] border border-[var(--border-solid)] bg-[var(--surface-solid)] ' +
   'px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-faint)] ' +
-  'shadow-[var(--shadow-sm)] transition-colors duration-150 ' +
+  'shadow-[var(--shadow-sm)] transition-[border-color,box-shadow,background-color] duration-150 ease-[var(--ease-out)] ' +
+  'hover:border-[var(--border-strong)] ' +
   'focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)] ' +
   'disabled:cursor-not-allowed disabled:opacity-60'
 

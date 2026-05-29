@@ -69,7 +69,7 @@ export function Modal({
       }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-[fadeIn_180ms_ease-out]" />
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-md animate-[fadeIn_200ms_var(--ease-out)]" />
 
       {/* Dialog */}
       <div
@@ -79,8 +79,9 @@ export function Modal({
           'relative w-full sm:w-[min(92vw,640px)] max-h-[92vh] flex flex-col',
           'bg-[var(--surface-strong)] backdrop-blur-2xl backdrop-saturate-150',
           'border border-[var(--border-strong)] shadow-[var(--shadow-lg)]',
+          'ring-1 ring-inset ring-white/10',
           'rounded-t-[var(--radius-xl)] sm:rounded-[var(--radius-xl)]',
-          'animate-[slideUp_220ms_cubic-bezier(0.16,1,0.3,1)]',
+          'animate-[slideUp_280ms_var(--ease-drawer)]',
           'focus:outline-none',
           sizeMap[size],
           className,
@@ -112,14 +113,6 @@ export function Modal({
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px) scale(0.98) } to { opacity: 1; transform: translateY(0) scale(1) } }
-        @media (prefers-reduced-motion: reduce) {
-          [class*="animate-["] { animation: none !important; }
-        }
-      `}</style>
     </div>,
     document.body,
   )
