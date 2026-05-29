@@ -31,6 +31,23 @@ const PREVIEW_PAYLOAD = {
 }
 
 describe('ImportModal Phase 2 undo flow', () => {
+  it('lists every accepted import extension in the drop-zone copy', () => {
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+
+    expect(screen.getByText(/CSV \/ XLS \/ XLSX \/ OFX \/ QFX/i)).toBeInTheDocument()
+  })
+
+  it('advertises OFX/QFX MIME types so the file picker does not grey them out', () => {
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+
+    const input = document.querySelector('input[type="file"]')
+    const accept = input?.getAttribute('accept') ?? ''
+    expect(accept).toContain('.ofx')
+    expect(accept).toContain('.qfx')
+    expect(accept).toContain('application/x-ofx')
+    expect(accept).toContain('application/vnd.intu.qfx')
+  })
+
   it('shows an Undo toast after a successful import that includes a batch_id', async () => {
     server.use(
       http.post('/api/v1/transactions/import/preview', () => HttpResponse.json(PREVIEW_PAYLOAD)),

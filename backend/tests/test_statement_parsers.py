@@ -188,6 +188,19 @@ def test_parse_statement_generic_csv_falls_through_for_unknown_headers():
     assert rows == []
 
 
+def _make_xls(headers: list, data_rows: list[list]) -> bytes:
+    book = Workbook()
+    sheet = book.add_sheet("Activity")
+    for col, header in enumerate(headers):
+        sheet.write(0, col, header)
+    for row_idx, row in enumerate(data_rows, start=1):
+        for col, value in enumerate(row):
+            sheet.write(row_idx, col, value)
+    buf = io.BytesIO()
+    book.save(buf)
+    return buf.getvalue()
+
+
 def test_parse_statement_xls_amex_format():
     book = Workbook()
     sheet = book.add_sheet("Activity")
@@ -226,6 +239,150 @@ def test_parse_statement_xls_rejects_missing_header_row():
         parse_statement("statement.xls", buf.getvalue())
 
 
+def test_parse_statement_xls_checking_signed_amount_preserves_sign():
+    # Regression: checking XLS with a single signed Amount column should NOT
+    # apply the AmEx-style inversion. Positive = deposit (credit), negative = withdrawal (debit).
+    book = Workbook()
+    sheet = book.add_sheet("Activity")
+    sheet.write(0, 0, "Date")
+    sheet.write(0, 1, "Description")
+    sheet.write(0, 2, "Amount")
+    sheet.write(1, 0, "05/01/2026")
+    sheet.write(1, 1, "Paycheck")
+    sheet.write(1, 2, 1000.00)
+    sheet.write(2, 0, "05/02/2026")
+    sheet.write(2, 1, "Rent")
+    sheet.write(2, 2, -1200.00)
+    buf = io.BytesIO()
+    book.save(buf)
+
+    rows, fmt, errors = parse_statement("statement.xls", buf.getvalue(), source="checking")
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["checking"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Paycheck", "credit", 100000),
+        ("Rent", "debit", 120000),
+    ]
+
+
+def test_parse_statement_xls_withdrawal_deposit_columns():
+    # Regression: XLS checking files with Withdrawal/Deposit headers were rejected.
+    book = Workbook()
+    sheet = book.add_sheet("Activity")
+    sheet.write(0, 0, "Date")
+    sheet.write(0, 1, "Description")
+    sheet.write(0, 2, "Withdrawal")
+    sheet.write(0, 3, "Deposit")
+    sheet.write(1, 0, "05/01/2026")
+    sheet.write(1, 1, "Paycheck")
+    sheet.write(1, 2, "")
+    sheet.write(1, 3, 1000.00)
+    sheet.write(2, 0, "05/02/2026")
+    sheet.write(2, 1, "Rent")
+    sheet.write(2, 2, 1200.00)
+    sheet.write(2, 3, "")
+    buf = io.BytesIO()
+    book.save(buf)
+
+    rows, fmt, errors = parse_statement("statement.xls", buf.getvalue(), source="checking")
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["checking"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Paycheck", "credit", 100000),
+        ("Rent", "debit", 120000),
+    ]
+
+
+def test_parse_statement_xls_credit_amount_before_debit_amount():
+    # Regression: "Credit Amount" must not also be chosen as the debit/amount column.
+    content = _make_xls(
+        ["Date", "Description", "Credit Amount", "Debit Amount"],
+        [
+            ["05/01/2026", "Paycheck", 1000.00, ""],
+            ["05/02/2026", "Rent", "", 1200.00],
+        ],
+    )
+
+    rows, _, errors = parse_statement("statement.xls", content, source="checking")
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Paycheck", "credit", 100000),
+        ("Rent", "debit", 120000),
+    ]
+
+
+def test_parse_statement_xls_payee_withdrawal_deposit_columns():
+    content = _make_xls(
+        ["Date", "Payee", "Withdrawal", "Deposit"],
+        [
+            ["05/01/2026", "Employer", "", 1000.00],
+            ["05/02/2026", "Landlord", 1200.00, ""],
+        ],
+    )
+
+    rows, fmt, errors = parse_statement("statement.xls", content, source="checking")
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["checking"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Employer", "credit", 100000),
+        ("Landlord", "debit", 120000),
+    ]
+
+
+def test_parse_statement_xls_payment_date_does_not_shadow_amount():
+    content = _make_xls(
+        ["Date", "Description", "Payment Date", "Amount"],
+        [["05/01/2026", "Coffee", "05/03/2026", 4.25]],
+    )
+
+    rows, _, errors = parse_statement("statement.xls", content)
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+    ]
+
+
+def test_parse_statement_xls_payment_method_does_not_shadow_amount():
+    content = _make_xls(
+        ["Date", "Description", "Payment Method", "Amount"],
+        [["05/01/2026", "Coffee", "ACH", 4.25]],
+    )
+
+    rows, _, errors = parse_statement("statement.xls", content)
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+    ]
+
+
+def test_parse_statement_xls_debit_credit_columns_blank_credit_is_debit():
+    # Regression: when a credit column exists but is blank on a debit row, the
+    # debit value must be treated as a debit, not flipped into a credit.
+    book = Workbook()
+    sheet = book.add_sheet("Activity")
+    sheet.write(0, 0, "Date")
+    sheet.write(0, 1, "Description")
+    sheet.write(0, 2, "Debit")
+    sheet.write(0, 3, "Credit")
+    sheet.write(1, 0, "05/01/2026")
+    sheet.write(1, 1, "Coffee")
+    sheet.write(1, 2, 4.25)
+    sheet.write(1, 3, "")
+    sheet.write(2, 0, "05/02/2026")
+    sheet.write(2, 1, "Refund")
+    sheet.write(2, 2, "")
+    sheet.write(2, 3, 4.25)
+    buf = io.BytesIO()
+    book.save(buf)
+
+    rows, _, errors = parse_statement("statement.xls", buf.getvalue())
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+        ("Refund", "credit", 425),
+    ]
+
+
 def test_parse_statement_xls_uses_xldate_for_numeric_dates():
     book = Workbook()
     sheet = book.add_sheet("Activity")
@@ -258,3 +415,642 @@ def test_parse_statement_counts_malformed_amounts_as_errors():
     rows, _, errors = parse_statement("statement.csv", body)
     assert len(rows) == 1
     assert errors == 1
+
+
+# ---------------------------------------------------------------------------
+# XLSX format
+# ---------------------------------------------------------------------------
+
+def _make_xlsx(headers: list, data_rows: list[list]) -> bytes:
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(headers)
+    for row in data_rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_parse_statement_xlsx_basic():
+    content = _make_xlsx(
+        ["Date", "Description", "Amount"],
+        [["05/01/2026", "Coffee", 4.25], ["05/02/2026", "Refund", -4.25]],
+    )
+    rows, fmt, errors = parse_statement("statement.xlsx", content)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["xlsx"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+        ("Refund", "credit", 425),
+    ]
+
+
+def test_parse_statement_xlsx_checking_source_label():
+    content = _make_xlsx(["Date", "Description", "Amount"], [["05/01/2026", "Coffee", 4.25]])
+    _, fmt, _ = parse_statement("statement.xlsx", content, source="checking")
+    assert fmt == FORMAT_NAMES["checking"]
+
+
+def test_parse_statement_xlsx_rejects_missing_header_row():
+    content = _make_xlsx(["Foo", "Bar"], [["x", "y"]])
+    with pytest.raises(ValueError):
+        parse_statement("statement.xlsx", content)
+
+
+def test_parse_statement_xlsx_rejects_malformed_workbook_as_value_error():
+    with pytest.raises(ValueError, match="Could not parse XLSX file"):
+        parse_statement("statement.xlsx", b"not a workbook")
+
+
+def test_parse_statement_xlsx_native_date_cell():
+    import openpyxl
+    from datetime import date as dt
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Date", "Description", "Amount"])
+    ws.cell(row=2, column=1, value=dt(2026, 5, 1))
+    ws.cell(row=2, column=2, value="Coffee")
+    ws.cell(row=2, column=3, value=4.25)
+    buf = io.BytesIO()
+    wb.save(buf)
+    rows, _, errors = parse_statement("statement.xlsx", buf.getvalue())
+    assert errors == 0
+    assert len(rows) == 1
+    assert rows[0].transaction_date == date(2026, 5, 1)
+
+
+def test_parse_statement_xlsx_credit_column():
+    content = _make_xlsx(
+        ["Date", "Description", "Amount", "Credit"],
+        [["05/01/2026", "Refund", 0.0, 4.25]],
+    )
+    rows, _, errors = parse_statement("statement.xlsx", content)
+    assert errors == 0
+    assert rows[0].transaction_type == "credit"
+    assert rows[0].amount_cents == 425
+
+
+def test_parse_statement_xlsx_checking_signed_amount_preserves_sign():
+    # Regression: checking XLSX with a single signed Amount column should NOT
+    # apply the AmEx-style inversion. Positive = deposit (credit), negative = withdrawal (debit).
+    content = _make_xlsx(
+        ["Date", "Description", "Amount"],
+        [
+            ["05/01/2026", "Paycheck", 1000.00],
+            ["05/02/2026", "Rent", -1200.00],
+        ],
+    )
+    rows, fmt, errors = parse_statement("statement.xlsx", content, source="checking")
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["checking"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Paycheck", "credit", 100000),
+        ("Rent", "debit", 120000),
+    ]
+
+
+def test_parse_statement_xlsx_withdrawal_deposit_columns():
+    # Regression: XLSX checking files with Withdrawal/Deposit headers were rejected.
+    content = _make_xlsx(
+        ["Date", "Description", "Withdrawal", "Deposit"],
+        [
+            ["05/01/2026", "Paycheck", "", 1000.00],
+            ["05/02/2026", "Rent", 1200.00, ""],
+        ],
+    )
+    rows, fmt, errors = parse_statement("statement.xlsx", content, source="checking")
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["checking"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Paycheck", "credit", 100000),
+        ("Rent", "debit", 120000),
+    ]
+
+
+def test_parse_statement_xlsx_credit_amount_before_debit_amount():
+    # Regression: "Credit Amount" must not also be chosen as the debit/amount column.
+    content = _make_xlsx(
+        ["Date", "Description", "Credit Amount", "Debit Amount"],
+        [
+            ["05/01/2026", "Paycheck", 1000.00, ""],
+            ["05/02/2026", "Rent", "", 1200.00],
+        ],
+    )
+
+    rows, _, errors = parse_statement("statement.xlsx", content, source="checking")
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Paycheck", "credit", 100000),
+        ("Rent", "debit", 120000),
+    ]
+
+
+def test_parse_statement_xlsx_payee_withdrawal_deposit_columns():
+    content = _make_xlsx(
+        ["Date", "Payee", "Withdrawal", "Deposit"],
+        [
+            ["05/01/2026", "Employer", "", 1000.00],
+            ["05/02/2026", "Landlord", 1200.00, ""],
+        ],
+    )
+
+    rows, fmt, errors = parse_statement("statement.xlsx", content, source="checking")
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["checking"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Employer", "credit", 100000),
+        ("Landlord", "debit", 120000),
+    ]
+
+
+def test_parse_statement_xlsx_payment_date_does_not_shadow_amount():
+    content = _make_xlsx(
+        ["Date", "Description", "Payment Date", "Amount"],
+        [["05/01/2026", "Coffee", "05/03/2026", 4.25]],
+    )
+
+    rows, _, errors = parse_statement("statement.xlsx", content)
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+    ]
+
+
+def test_parse_statement_xlsx_payment_method_does_not_shadow_amount():
+    content = _make_xlsx(
+        ["Date", "Description", "Payment Method", "Amount"],
+        [["05/01/2026", "Coffee", "ACH", 4.25]],
+    )
+
+    rows, _, errors = parse_statement("statement.xlsx", content)
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+    ]
+
+
+def test_parse_statement_xlsx_debit_credit_columns_blank_credit_is_debit():
+    # Regression: when a credit column exists but is blank on a debit row, the
+    # debit value must be treated as a debit, not flipped into a credit.
+    content = _make_xlsx(
+        ["Date", "Description", "Debit", "Credit"],
+        [
+            ["05/01/2026", "Coffee", 4.25, ""],
+            ["05/02/2026", "Refund", "", 4.25],
+        ],
+    )
+    rows, _, errors = parse_statement("statement.xlsx", content)
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+        ("Refund", "credit", 425),
+    ]
+
+
+def test_parse_statement_xlsx_malformed_amount_counted_as_error():
+    content = _make_xlsx(
+        ["Date", "Description", "Amount"],
+        [["05/01/2026", "Good", 4.25], ["05/02/2026", "Bad", "not-a-number"]],
+    )
+    rows, _, errors = parse_statement("statement.xlsx", content)
+    assert len(rows) == 1
+    assert errors == 1
+
+
+# ---------------------------------------------------------------------------
+# OFX / QFX format
+# ---------------------------------------------------------------------------
+
+_OFX_SGML = b"""\
+OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+
+<OFX>
+<BANKMSGSRSV1>
+<STMTTRNRS>
+<STMTRS>
+<BANKTRNLIST>
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20260501
+<TRNAMT>-4.25
+<FITID>001
+<NAME>Coffee shop
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>CREDIT
+<DTPOSTED>20260502
+<TRNAMT>4.25
+<FITID>002
+<NAME>Refund
+</STMTTRN>
+</BANKTRNLIST>
+</STMTRS>
+</STMTTRNRS>
+</BANKMSGSRSV1>
+</OFX>
+"""
+
+_OFX_XML = b"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<OFX>
+  <BANKMSGSRSV1>
+    <STMTTRNRS>
+      <STMTRS>
+        <BANKTRNLIST>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260501</DTPOSTED>
+            <TRNAMT>-4.25</TRNAMT>
+            <FITID>001</FITID>
+            <NAME>Coffee shop</NAME>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20260502</DTPOSTED>
+            <TRNAMT>4.25</TRNAMT>
+            <FITID>002</FITID>
+            <NAME>Refund</NAME>
+          </STMTTRN>
+        </BANKTRNLIST>
+      </STMTRS>
+    </STMTTRNRS>
+  </BANKMSGSRSV1>
+</OFX>
+"""
+
+
+_OFX_SGML_HYBRID = b"""\
+OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+
+<OFX>
+<BANKMSGSRSV1>
+<STMTTRNRS>
+<STMTRS>
+<BANKTRNLIST>
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20260501
+<TRNAMT>-4.25
+<FITID>001</FITID>
+<NAME>Coffee shop</NAME>
+</STMTTRN>
+</BANKTRNLIST>
+</STMTRS>
+</STMTTRNRS>
+</BANKMSGSRSV1>
+</OFX>
+"""
+
+
+def test_parse_statement_ofx_sgml():
+    rows, fmt, errors = parse_statement("statement.ofx", _OFX_SGML)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["ofx"]
+    assert len(rows) == 2
+    assert rows[0].transaction_date == date(2026, 5, 1)
+    assert rows[0].transaction_type == "debit"
+    assert rows[0].amount_cents == 425
+    assert rows[0].description == "Coffee shop"
+    assert rows[1].transaction_type == "credit"
+
+
+def test_parse_statement_ofx_xml():
+    rows, fmt, errors = parse_statement("statement.ofx", _OFX_XML)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["ofx"]
+    assert [(r.transaction_type, r.amount_cents) for r in rows] == [("debit", 425), ("credit", 425)]
+
+
+def test_parse_statement_ofx_sgml_hybrid_falls_back_from_xml_detection():
+    # Some OFX 1.x exports close a few leaf tags, but are still SGML because
+    # most tags are unclosed. These should fall back instead of failing XML parse.
+    rows, fmt, errors = parse_statement("statement.ofx", _OFX_SGML_HYBRID)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["ofx"]
+    assert len(rows) == 1
+    assert rows[0].description == "Coffee shop"
+    assert rows[0].transaction_type == "debit"
+    assert rows[0].amount_cents == 425
+
+
+_OFX_XML_NAMESPACED = b"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<OFX xmlns="http://ofx.net/types/2003/04">
+  <BANKMSGSRSV1>
+    <STMTTRNRS>
+      <STMTRS>
+        <BANKTRNLIST>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260501</DTPOSTED>
+            <TRNAMT>-4.25</TRNAMT>
+            <FITID>001</FITID>
+            <NAME>Coffee shop</NAME>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20260502</DTPOSTED>
+            <TRNAMT>4.25</TRNAMT>
+            <FITID>002</FITID>
+            <NAME>Refund</NAME>
+          </STMTTRN>
+        </BANKTRNLIST>
+      </STMTRS>
+    </STMTTRNRS>
+  </BANKMSGSRSV1>
+</OFX>
+"""
+
+
+def test_parse_statement_ofx_xml_with_default_namespace():
+    # Regression: OFX 2.x documents declare a default namespace on <OFX>.
+    # ElementTree expands child tags to {ns}STMTTRN; iteration must match by local name.
+    rows, fmt, errors = parse_statement("statement.ofx", _OFX_XML_NAMESPACED)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["ofx"]
+    assert len(rows) == 2
+    assert rows[0].description == "Coffee shop"
+    assert rows[0].transaction_type == "debit"
+    assert rows[0].amount_cents == 425
+    assert rows[1].description == "Refund"
+    assert rows[1].transaction_type == "credit"
+
+
+def test_parse_statement_qfx_extension_uses_ofx_label():
+    rows, fmt, errors = parse_statement("statement.qfx", _OFX_SGML)
+    assert fmt == FORMAT_NAMES["ofx"]
+    assert len(rows) == 2
+
+
+def test_parse_statement_ofx_missing_amount_counted_as_error():
+    body = b"""\
+OFXHEADER:100
+<OFX>
+<BANKTRNLIST>
+<STMTTRN>
+<DTPOSTED>20260501
+<NAME>No amount
+</STMTTRN>
+</BANKTRNLIST>
+</OFX>
+"""
+    rows, _, errors = parse_statement("statement.ofx", body)
+    assert len(rows) == 0
+    assert errors == 1
+
+
+def test_parse_statement_ofx_sgml_explicit_plus_amount():
+    body = b"""\
+OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+<OFX>
+<BANKTRNLIST>
+<STMTTRN>
+<DTPOSTED>20260501
+<TRNAMT>+100.00
+<NAME>Refund
+</STMTTRN>
+</BANKTRNLIST>
+</OFX>
+"""
+    rows, fmt, errors = parse_statement("statement.ofx", body)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["ofx"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Refund", "credit", 10000),
+    ]
+
+
+def test_parse_statement_ofx_checking_source_label():
+    _, fmt, _ = parse_statement("statement.ofx", _OFX_SGML, source="checking")
+    assert fmt == FORMAT_NAMES["ofx"]
+
+
+# ---------------------------------------------------------------------------
+# Expanded CSV aliases and delimiter detection
+# ---------------------------------------------------------------------------
+
+def test_parse_statement_csv_post_date_column():
+    body = b"Post Date,Description,Amount\n05/01/2026,Coffee,-4.25\n"
+    rows, _, errors = parse_statement("statement.csv", body)
+    assert errors == 0
+    assert len(rows) == 1
+    assert rows[0].transaction_date == date(2026, 5, 1)
+
+
+def test_parse_statement_csv_memo_as_description():
+    body = b"Date,Memo,Amount\n2026-05-01,Grocery store,-42.50\n"
+    rows, _, errors = parse_statement("statement.csv", body)
+    assert errors == 0
+    assert rows[0].description == "Grocery store"
+
+
+def test_parse_statement_csv_period_in_header_normalized():
+    # "Trans. Date" should match the "Trans Date" alias after period normalization
+    body = b"Trans. Date,Description,Amount\n05/01/2026,Coffee,-4.25\n"
+    rows, _, errors = parse_statement("statement.csv", body)
+    assert errors == 0
+    assert len(rows) == 1
+    assert rows[0].transaction_date == date(2026, 5, 1)
+
+
+def test_parse_statement_csv_tab_delimited():
+    body = b"Date\tDescription\tAmount\n2026-05-01\tCoffee\t-4.25\n2026-05-02\tRefund\t4.25\n"
+    rows, fmt, errors = parse_statement("statement.csv", body)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["generic"]
+    assert len(rows) == 2
+    assert rows[0].transaction_type == "debit"
+    assert rows[1].transaction_type == "credit"
+
+
+def test_parse_statement_csv_semicolon_delimited():
+    body = b"Date;Description;Amount\n2026-05-01;Coffee;-4.25\n2026-05-02;Refund;4.25\n"
+    rows, fmt, errors = parse_statement("statement.csv", body)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["generic"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+        ("Refund", "credit", 425),
+    ]
+
+
+def test_parse_statement_csv_pipe_delimited():
+    body = b"Date|Description|Amount\n2026-05-01|Coffee|-4.25\n2026-05-02|Refund|4.25\n"
+    rows, fmt, errors = parse_statement("statement.csv", body)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["generic"]
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 425),
+        ("Refund", "credit", 425),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Review regression fixes
+# ---------------------------------------------------------------------------
+
+def test_parse_statement_csv_comma_with_semicolons_and_pipes_in_descriptions():
+    # Regression (#2): a comma-separated file whose descriptions contain ';' and
+    # '|' must not be mis-detected as semicolon/pipe-delimited (which yielded 0 rows).
+    body = (
+        b"Date,Description,Amount\n"
+        b"2026-05-01,Amazon.com*ABC; ref:123|456,-4.25\n"
+        b"2026-05-02,Store; aisle|7,-9.50\n"
+    )
+    rows, fmt, errors = parse_statement("statement.csv", body)
+    assert errors == 0
+    assert fmt == FORMAT_NAMES["generic"]
+    assert len(rows) == 2
+    assert rows[0].description == "Amazon.com*ABC; ref:123|456"
+    assert rows[0].transaction_type == "debit"
+    assert rows[0].amount_cents == 425
+
+
+def test_parse_statement_csv_colon_and_paren_headers():
+    # Regression (#8): headers like "Date:" and "(Amount)" must normalize and match.
+    body = b"Date:,Description,(Amount)\n2026-05-01,Coffee,-4.25\n"
+    rows, _, errors = parse_statement("statement.csv", body)
+    assert errors == 0
+    assert len(rows) == 1
+    assert rows[0].description == "Coffee"
+    assert rows[0].transaction_type == "debit"
+    assert rows[0].amount_cents == 425
+
+
+def test_parse_statement_xls_card_signed_amount_with_credit_column_not_inverted():
+    # Regression (#3): when split debit/credit columns exist, the Amount column is
+    # already signed — a charge (negative Amount, blank Credit) must stay a debit.
+    content = _make_xls(
+        ["Date", "Description", "Amount", "Credit"],
+        [
+            ["05/01/2026", "Coffee", -50.00, ""],
+            ["05/02/2026", "Payment", 50.00, 50.00],
+        ],
+    )
+    rows, _, errors = parse_statement("statement.xls", content)
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 5000),
+        ("Payment", "credit", 5000),
+    ]
+
+
+def test_parse_statement_xlsx_card_signed_amount_with_credit_column_not_inverted():
+    # Regression (#3): XLSX mirror of the signed-amount-with-credit-column case.
+    content = _make_xlsx(
+        ["Date", "Description", "Amount", "Credit"],
+        [
+            ["05/01/2026", "Coffee", -50.00, ""],
+            ["05/02/2026", "Payment", 50.00, 50.00],
+        ],
+    )
+    rows, _, errors = parse_statement("statement.xlsx", content)
+    assert errors == 0
+    assert [(r.description, r.transaction_type, r.amount_cents) for r in rows] == [
+        ("Coffee", "debit", 5000),
+        ("Payment", "credit", 5000),
+    ]
+
+
+def test_parse_statement_xls_row_without_amount_counts_as_error():
+    # Regression (#14): a row with date+description but no amount cell is surfaced
+    # as a skipped error, not silently dropped.
+    content = _make_xls(
+        ["Date", "Description", "Amount"],
+        [["05/01/2026", "Good", 4.25], ["05/02/2026", "No amount", ""]],
+    )
+    rows, _, errors = parse_statement("statement.xls", content)
+    assert len(rows) == 1
+    assert errors == 1
+
+
+def test_parse_statement_xlsx_row_without_amount_counts_as_error():
+    # Regression (#14): XLSX mirror of the no-amount-row case.
+    content = _make_xlsx(
+        ["Date", "Description", "Amount"],
+        [["05/01/2026", "Good", 4.25], ["05/02/2026", "No amount", ""]],
+    )
+    rows, _, errors = parse_statement("statement.xlsx", content)
+    assert len(rows) == 1
+    assert errors == 1
+
+
+def test_parse_statement_xlsx_error_message_has_no_internal_detail():
+    # Regression (#13): the 400 detail must not leak openpyxl/library internals.
+    with pytest.raises(ValueError) as exc_info:
+        parse_statement("statement.xlsx", b"not a workbook")
+    assert str(exc_info.value) == "Could not parse XLSX file"
+
+
+def test_parse_statement_ofx_sgml_prefers_name_over_memo():
+    # Regression (#1): SGML must prefer NAME over MEMO (matching the XML path) so
+    # the same statement hashes/displays identically across OFX 1.x and 2.x.
+    body = b"""\
+OFXHEADER:100
+DATA:OFXSGML
+<OFX>
+<BANKTRNLIST>
+<STMTTRN>
+<DTPOSTED>20260501
+<TRNAMT>-4.25
+<MEMO>Card purchase 1234
+<NAME>Starbucks
+</STMTTRN>
+</BANKTRNLIST>
+</OFX>
+"""
+    rows, _, errors = parse_statement("statement.ofx", body)
+    assert errors == 0
+    assert len(rows) == 1
+    assert rows[0].description == "Starbucks"
+
+
+def test_parse_statement_ofx_sgml_unterminated_last_txn_does_not_absorb_following_section():
+    # Regression (#7): a final STMTTRN missing its closing tag must not absorb a
+    # following balance section and borrow its date.
+    body = b"""\
+OFXHEADER:100
+DATA:OFXSGML
+<OFX>
+<BANKTRNLIST>
+<STMTTRN>
+<TRNAMT>-4.25
+<NAME>Coffee shop
+</BANKTRNLIST>
+<LEDGERBAL>
+<DTPOSTED>20260601
+<BALAMT>1234.56
+</LEDGERBAL>
+</OFX>
+"""
+    rows, _, errors = parse_statement("statement.ofx", body)
+    # Transaction has no DTPOSTED of its own → counted as an error, not silently
+    # dated from the trailing balance section.
+    assert rows == []
+    assert errors == 1
+
+
+def test_parse_statement_ofx_valid_xml_without_transactions_falls_back_to_sgml():
+    # Regression (#5): a buffer that parses as a valid but transaction-less XML
+    # tree (closing leaf tags tripped XML detection) must recover SGML-style
+    # transactions instead of silently returning zero.
+    body = (
+        b"OFXHEADER:100\nDATA:OFXSGML\n"
+        b"<OFX><![CDATA[\n"
+        b"<STMTTRN>\n<DTPOSTED>20260501\n<TRNAMT>-4.25\n<NAME>Coffee shop</NAME>\n</STMTTRN>\n"
+        b"]]></OFX>\n"
+    )
+    rows, fmt, errors = parse_statement("statement.ofx", body)
+    assert fmt == FORMAT_NAMES["ofx"]
+    assert errors == 0
+    assert len(rows) == 1
+    assert rows[0].description == "Coffee shop"
+    assert rows[0].transaction_date == date(2026, 5, 1)

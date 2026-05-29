@@ -56,6 +56,7 @@ hiddenimports = [
     "uvicorn.lifespan.on",
     "bcrypt",
     "xlrd",
+    "openpyxl",
 ]
 
 a = Analysis(

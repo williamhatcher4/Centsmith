@@ -17,11 +17,13 @@
 # Usage:
 #   ./packaging/build.ps1
 #   ./packaging/build.ps1 -SkipTauri -ObfuscateBackend
+#   ./packaging/build.ps1 -Local          # skips updater signing for local testing
 
 [CmdletBinding()]
 param(
     [switch]$SkipTauri,
-    [switch]$ObfuscateBackend
+    [switch]$ObfuscateBackend,
+    [switch]$Local
 )
 
 $ErrorActionPreference = "Stop"
@@ -129,11 +131,34 @@ if ($SkipTauri) {
 Step "4/4  Tauri build (cargo tauri build)"
 $TauriCmd = Get-Command cargo -ErrorAction SilentlyContinue
 if (-not $TauriCmd) { throw "cargo not found. Install Rust from https://rustup.rs." }
+
+# -Local: disable updater artifact generation so Tauri doesn't require
+# TAURI_SIGNING_PRIVATE_KEY. This is done with a --config overlay merged at
+# build time rather than by mutating the tracked tauri.conf.json, so an
+# interrupted build (Ctrl-C, taskkill, crash) can never leave the repo with a
+# stripped/reordered config. The pubkey stays in place — with
+# createUpdaterArtifacts=false no signing is attempted, so it is harmless. CI
+# must never pass -Local so a missing secret is still a hard failure there.
+$TauriConfigArgs = @()
+$LocalOverlay = $null
+if ($Local) {
+    Write-Host "[-Local] Disabling updater artifacts for local build." -ForegroundColor Yellow
+    $LocalOverlay = Join-Path ([System.IO.Path]::GetTempPath()) "centsmith-tauri-local-$PID.json"
+    $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($LocalOverlay, '{"bundle":{"createUpdaterArtifacts":false}}', $Utf8NoBom)
+    $TauriConfigArgs = @("--config", $LocalOverlay)
+}
+
 Push-Location (Join-Path $Desktop "src-tauri")
 try {
-    & cargo tauri build
+    & cargo tauri build @TauriConfigArgs
     if ($LASTEXITCODE -ne 0) { throw "Tauri build failed" }
-} finally { Pop-Location }
+} finally {
+    Pop-Location
+    if ($null -ne $LocalOverlay -and (Test-Path $LocalOverlay)) {
+        Remove-Item -Force $LocalOverlay -ErrorAction SilentlyContinue
+    }
+}
 
 $NsisOut = Join-Path $Desktop "src-tauri\target\release\bundle\nsis"
 Write-Host ""

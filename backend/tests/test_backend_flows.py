@@ -237,6 +237,22 @@ def test_import_rejects_oversized_upload_while_reading(client):
     assert response.json()["detail"] == "File too large (max 10 MB)"
 
 
+def test_import_preview_malformed_xlsx_returns_400(client):
+    login(client)
+    files = {
+        "file": (
+            "statement.xlsx",
+            b"not a workbook",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+
+    response = client.post("/api/v1/transactions/import/preview", files=files)
+
+    assert response.status_code == 400
+    assert "Could not parse XLSX file" in response.json()["detail"]
+
+
 def test_duplicate_import_reports_skipped_debits_separately_from_payments(client):
     login(client)
     files = statement_file([

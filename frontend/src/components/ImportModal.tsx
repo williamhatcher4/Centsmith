@@ -31,7 +31,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
   }
   const uploadCopy = isChecking
     ? 'Drop a checking-account statement. Every row (deposits and withdrawals) becomes a Personal transaction in your inbox.'
-    : 'Drop a credit card statement. This app supports the headerless account activity CSV and American Express XLS formats you provided.'
+    : 'Drop a credit card statement. Supported formats: Account Activity CSV, American Express XLS/XLSX, OFX/QFX bank exports, and most generic CSV exports.'
   const errorsCopy = result && result.skipped_errors > 0 ? ` ${result.skipped_errors} row${result.skipped_errors === 1 ? '' : 's'} could not be parsed and were skipped.` : ''
   const doneCopy = isChecking
     ? `${result?.skipped ?? 0} duplicates skipped.${errorsCopy} New transactions are waiting in the Personal Inbox.`
@@ -111,9 +111,9 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
         <div>
           <p className="mb-5 text-sm leading-relaxed text-[var(--text-muted)]">{uploadCopy}</p>
           <button type="button" onClick={() => fileRef.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={(e) => { e.preventDefault(); setDragOver(false); const dropped = e.dataTransfer.files[0]; if (dropped) readFile(dropped) }} className={cn('flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[8px] border-2 border-dashed px-6 py-10 text-sm transition-colors', dragOver ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]' : 'border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--text-subtle)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]')}>
-            {loading ? <><span className="size-6 animate-spin rounded-full border-2 border-current border-r-transparent" /><span>Parsing file...</span></> : <><Upload className="size-7" /><span><strong className="text-[var(--text)]">Choose file</strong> or drag and drop CSV/XLS</span></>}
+            {loading ? <><span className="size-6 animate-spin rounded-full border-2 border-current border-r-transparent" /><span>Parsing file...</span></> : <><Upload className="size-7" /><span><strong className="text-[var(--text)]">Choose file</strong> or drag and drop CSV / XLS / XLSX / OFX / QFX</span></>}
           </button>
-          <input ref={fileRef} type="file" accept=".csv,.xls,text/csv,application/vnd.ms-excel" className="hidden" onChange={(e) => { const picked = e.target.files?.[0]; if (picked) readFile(picked) }} />
+          <input ref={fileRef} type="file" accept=".csv,.xls,.xlsx,.ofx,.qfx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/x-ofx,application/vnd.intu.qfx" className="hidden" onChange={(e) => { const picked = e.target.files?.[0]; if (picked) readFile(picked) }} />
           {error && <div role="alert" className="mt-3 rounded-[8px] bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">{error}</div>}
         </div>
       )}
