@@ -35,7 +35,8 @@ export const IconButton = forwardRef<HTMLButtonElement, Props>(function IconButt
       type={type}
       className={cn(
         'inline-flex items-center justify-center rounded-[var(--radius-sm)]',
-        'transition-colors duration-150 cursor-pointer disabled:opacity-50',
+        'transition-[transform,background-color,color] duration-150 ease-[var(--ease-out)]',
+        'cursor-pointer disabled:opacity-50 disabled:active:scale-100 active:scale-[0.92]',
         variants[variant],
         sizes[size],
         className,

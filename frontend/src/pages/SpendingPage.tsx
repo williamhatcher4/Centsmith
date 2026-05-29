@@ -5,6 +5,9 @@ import { transactionsApi } from '../api/transactions'
 import type { SpendingByCategory } from '../types'
 import { formatMoney } from '../utils/money'
 import { Card, CardHeader, PageHeader, SegmentedControl, Skeleton, StatCard } from '../components/ui'
+import { useReducedMotion } from '../hooks/useReducedMotion'
+
+const money = (n: number) => formatMoney(Math.round(n))
 
 const CATEGORY_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)']
 
@@ -26,7 +29,7 @@ function CategoryRow({ category, color, perMonthCents }: { category: SpendingByC
         </div>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
-        <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${Math.max(0, Math.min(100, category.percent))}%`, background: color }} />
+        <div className="h-full rounded-full transition-[width] duration-500 ease-[var(--ease-out)]" style={{ width: `${Math.max(0, Math.min(100, category.percent))}%`, background: color }} />
       </div>
       <div className="mt-1 text-[11px] text-[var(--text-faint)]">{category.percent.toFixed(1)}%</div>
     </div>
@@ -34,6 +37,7 @@ function CategoryRow({ category, color, perMonthCents }: { category: SpendingByC
 }
 
 export function SpendingPage() {
+  const reduced = useReducedMotion()
   const [months, setMonths] = useState(12)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const { data, isLoading } = useQuery({ queryKey: ['spending', months], queryFn: () => transactionsApi.personalSpending(months) })
@@ -48,7 +52,7 @@ export function SpendingPage() {
 
   return (
     <div>
-      <PageHeader title="Personal Spending" subtitle="Monthly personal spending with category breakdowns" />
+      <PageHeader eyebrow="Insights" title="Personal Spending" subtitle="Monthly personal spending with category breakdowns" />
       <div className="mb-5">
         <SegmentedControl
           value={months}
@@ -65,9 +69,15 @@ export function SpendingPage() {
       ) : (
         <>
           <div className="mb-6 grid gap-4 sm:grid-cols-3">
-            <StatCard label="Total personal" value={formatMoney(data.total_cents)} />
-            <StatCard label="Monthly average" value={formatMoney(data.average_per_month_cents)} />
-            <StatCard label="Months" value={String(points.length)} tone="neutral" />
+            <div className="animate-[fadeInUp_400ms_var(--ease-out)_both]">
+              <StatCard label="Total personal" value={formatMoney(data.total_cents)} animateTo={data.total_cents} format={money} gradient />
+            </div>
+            <div className="animate-[fadeInUp_400ms_var(--ease-out)_both]" style={{ animationDelay: '60ms' }}>
+              <StatCard label="Monthly average" value={formatMoney(data.average_per_month_cents)} animateTo={data.average_per_month_cents} format={money} tone="accent" />
+            </div>
+            <div className="animate-[fadeInUp_400ms_var(--ease-out)_both]" style={{ animationDelay: '120ms' }}>
+              <StatCard label="Months" value={String(points.length)} animateTo={points.length} format={(n) => String(Math.round(n))} tone="neutral" />
+            </div>
           </div>
 
           {income && income.total_cents > 0 && (
@@ -96,11 +106,17 @@ export function SpendingPage() {
                       margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
                       onMouseMove={(state) => { if (state.activeTooltipIndex != null) setHoverIndex(Number(state.activeTooltipIndex)) }}
                     >
+                      <defs>
+                        <linearGradient id="spendBar" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--chart-3)" stopOpacity={0.95} />
+                          <stop offset="100%" stopColor="var(--chart-3)" stopOpacity={0.5} />
+                        </linearGradient>
+                      </defs>
                       <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
                       <XAxis dataKey="month" tick={{ fill: 'var(--text-subtle)', fontSize: 12 }} />
                       <YAxis tick={{ fill: 'var(--text-subtle)', fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
-                      <Tooltip formatter={(v) => formatMoney(Math.round(Number(v) * 100))} contentStyle={{ background: 'var(--surface-solid)', border: '1px solid var(--border)', borderRadius: 8 }} cursor={{ fill: 'var(--accent-soft)' }} />
-                      <Bar dataKey="amount" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
+                      <Tooltip formatter={(v) => formatMoney(Math.round(Number(v) * 100))} contentStyle={{ background: 'var(--surface-strong)', border: '1px solid var(--border-strong)', borderRadius: 12, backdropFilter: 'var(--blur-glass)', boxShadow: 'var(--shadow-md)' }} cursor={{ fill: 'var(--accent-soft)' }} />
+                      <Bar dataKey="amount" fill="url(#spendBar)" radius={[5, 5, 0, 0]} isAnimationActive={!reduced} animationDuration={700} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -111,7 +127,7 @@ export function SpendingPage() {
                 {hoveredCategories.length === 0 ? (
                   <p className="text-sm text-[var(--text-subtle)]">No personal spending in this month.</p>
                 ) : (
-                  <div className="flex flex-col gap-4">
+                  <div key={hoveredPoint?.label} className="flex flex-col gap-4 animate-[fadeIn_220ms_var(--ease-out)]">
                     {hoveredCategories.map((category, index) => <CategoryRow key={category.category_name} category={category} color={colorFor(index)} />)}
                   </div>
                 )}

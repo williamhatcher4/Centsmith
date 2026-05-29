@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { useCountUp } from '../../hooks/useCountUp'
 
 type Tone = 'neutral' | 'positive' | 'negative' | 'accent'
 
@@ -11,6 +12,12 @@ interface Props {
   icon?: ReactNode
   trend?: { direction: 'up' | 'down' | 'flat'; label: string }
   hint?: ReactNode
+  /** Numeric target to count up to. When set, `value` is ignored and `format(animateTo)` is rendered. */
+  animateTo?: number
+  /** Formats the animated number. Must reproduce `value` at rest for stable text. */
+  format?: (n: number) => string
+  /** Render the value with the vivid brand gradient instead of a flat tone color. */
+  gradient?: boolean
   className?: string
 }
 
@@ -28,7 +35,28 @@ const iconBgMap: Record<Tone, string> = {
   accent: 'bg-[var(--accent-soft)] text-[var(--accent)]',
 }
 
-export function StatCard({ label, value, tone = 'neutral', icon, trend, hint, className }: Props) {
+const glowMap: Record<Tone, string> = {
+  neutral: 'var(--accent)',
+  positive: 'var(--success)',
+  negative: 'var(--danger)',
+  accent: 'var(--accent)',
+}
+
+export function StatCard({
+  label,
+  value,
+  tone = 'neutral',
+  icon,
+  trend,
+  hint,
+  animateTo,
+  format = (n) => String(Math.round(n)),
+  gradient,
+  className,
+}: Props) {
+  const animated = useCountUp(animateTo ?? 0, { enabled: animateTo != null })
+  const display = animateTo != null ? format(animated) : value
+
   return (
     <div
       className={cn(
@@ -36,11 +64,17 @@ export function StatCard({ label, value, tone = 'neutral', icon, trend, hint, cl
         'bg-[var(--surface)] backdrop-blur-xl backdrop-saturate-150',
         'border border-[var(--border)] shadow-[var(--shadow-sm)]',
         'px-5 py-4 sm:px-6 sm:py-5',
-        'transition-shadow duration-200 hover:shadow-[var(--shadow-md)]',
+        'transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-glow)]',
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      {/* ambient corner glow tinted by tone */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-8 -top-8 size-28 rounded-full opacity-20 blur-2xl transition-opacity duration-300 group-hover:opacity-40"
+        style={{ background: glowMap[tone] }}
+      />
+      <div className="relative flex items-start justify-between gap-3">
         <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-subtle)]">{label}</div>
         {icon && (
           <div className={cn('flex size-9 items-center justify-center rounded-full', iconBgMap[tone])}>
@@ -50,14 +84,16 @@ export function StatCard({ label, value, tone = 'neutral', icon, trend, hint, cl
       </div>
       <div
         className={cn(
-          'mt-2 text-2xl sm:text-3xl font-bold tabular-nums leading-tight tracking-tight',
-          toneMap[tone],
+          'relative mt-2 font-display text-[28px] font-bold leading-tight tracking-tight tabular-nums sm:text-[34px]',
+          gradient
+            ? 'bg-[image:var(--grad-vivid)] bg-clip-text text-transparent'
+            : toneMap[tone],
         )}
       >
-        {value}
+        {display}
       </div>
       {(trend || hint) && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-[var(--text-subtle)]">
+        <div className="relative mt-2 flex items-center gap-2 text-xs text-[var(--text-subtle)]">
           {trend && (
             <span
               className={cn(

@@ -64,7 +64,7 @@ function ImportsSection() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[var(--border)] text-left text-[11px] uppercase text-[var(--text-subtle)]">
+              <tr className="border-b border-[var(--border-strong)] bg-[var(--surface-muted)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">
                 <th className="px-3 py-2">When</th>
                 <th className="px-3 py-2">Filename</th>
                 <th className="px-3 py-2">Format</th>
@@ -104,7 +104,7 @@ function ImportsSection() {
 export function ExportsPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Exports" subtitle="Download Personal and Work transactions as separate CSV files" />
+      <PageHeader eyebrow="Data" title="Exports" subtitle="Download Personal and Work transactions as separate CSV files" />
       <div className="grid gap-4 md:grid-cols-2">
         <Card padding="md">
           <CardHeader title="Personal transactions" subtitle="Only rows sorted as Personal" />

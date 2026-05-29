@@ -15,15 +15,15 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-[var(--accent)] text-white shadow-sm hover:bg-[var(--accent-hover)] active:scale-[0.98] disabled:bg-[var(--accent)]/60',
+    'text-white bg-[image:var(--grad-brand)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-glow)] hover:brightness-[1.06] active:scale-[0.97]',
   secondary:
-    'bg-[var(--surface-strong)] backdrop-blur-md text-[var(--text)] border border-[var(--border-strong)] hover:bg-[var(--surface-solid)] active:scale-[0.98]',
+    'bg-[var(--surface-strong)] backdrop-blur-md text-[var(--text)] border border-[var(--border-strong)] hover:border-[var(--accent-ring)] hover:bg-[var(--surface-solid)] active:scale-[0.97]',
   ghost:
-    'bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]',
+    'bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] active:scale-[0.97]',
   danger:
-    'bg-[var(--danger-soft)] text-[var(--danger)] border border-[var(--danger-soft)] hover:bg-[var(--danger)] hover:text-white',
+    'bg-[var(--danger-soft)] text-[var(--danger)] border border-transparent hover:bg-[var(--danger)] hover:text-white active:scale-[0.97]',
   subtle:
-    'bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white',
+    'bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white active:scale-[0.97]',
 }
 
 const sizes: Record<Size, string> = {
@@ -55,8 +55,8 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
       disabled={disabled || loading}
       className={cn(
         'inline-flex items-center justify-center rounded-[var(--radius-sm)] font-semibold',
-        'transition-[background,color,transform,box-shadow] duration-150',
-        'disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer',
+        'transition-[transform,box-shadow,background-color,border-color,color,filter] duration-150 ease-[var(--ease-out)]',
+        'disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 cursor-pointer',
         variants[variant],
         sizes[size],
         fullWidth && 'w-full',
