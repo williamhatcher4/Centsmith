@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { settingsApi, type UpdateSettingsOptions } from '../api/settings'
 import type { UserSettings } from '../types'
-import { Button, Card, CardHeader, Field, IconButton, Input, PageHeader, Select, Skeleton } from '../components/ui'
+import { ACCENTS, Button, Card, CardHeader, Field, IconButton, Input, PageHeader, SegmentedControl, Select, Skeleton, useTheme, type Theme } from '../components/ui'
 import { useToast } from '../components/ui/Toaster'
+import { cn } from '../utils/cn'
 import { SYSTEM_CATEGORIES } from '../hooks/useCategories'
 import { HIDEABLE_NAV_LINKS } from '../constants/nav'
 
@@ -183,6 +184,7 @@ function DeleteCategoryModal({
 export function SettingsPage() {
   const qc = useQueryClient()
   const toast = useToast()
+  const { theme, setTheme, accent, setAccent } = useTheme()
   const [newCategory, setNewCategory] = useState('')
   const [addError, setAddError] = useState('')
   const [deleteState, setDeleteState] = useState<DeleteDialogState | null>(null)
@@ -334,6 +336,48 @@ export function SettingsPage() {
   return (
     <div>
       <PageHeader eyebrow="Preferences" title="Settings" subtitle="Customize categories and other preferences" />
+      <Card padding="md" className="mb-6">
+        <CardHeader title="Appearance" subtitle="Theme and accent color for the whole app." />
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-[var(--text)]">Theme</div>
+              <div className="text-xs text-[var(--text-subtle)]">Light or dark surfaces</div>
+            </div>
+            <SegmentedControl
+              aria-label="Theme"
+              value={theme}
+              onChange={(v) => setTheme(v as Theme)}
+              options={[{ label: 'Light', value: 'light' }, { label: 'Dark', value: 'dark' }]}
+            />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-[var(--text)]">Accent color</div>
+            <div className="mb-3 text-xs text-[var(--text-subtle)]">Tints buttons, highlights, active nav, and the brand mark</div>
+            <div className="flex flex-wrap gap-2.5">
+              {ACCENTS.map((a) => {
+                const selected = accent === a.id
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    aria-label={`${a.label} accent`}
+                    aria-pressed={selected}
+                    onClick={() => setAccent(a.id)}
+                    className={cn(
+                      'relative size-9 rounded-full ring-2 ring-offset-2 ring-offset-[var(--surface-solid)] transition-transform active:scale-95',
+                      selected ? 'ring-[var(--text)]' : 'ring-transparent hover:scale-110',
+                    )}
+                    style={{ background: a.swatch }}
+                  >
+                    {selected && <Check className="absolute inset-0 m-auto size-4 text-white drop-shadow" />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </Card>
       <Card padding="md" className="mb-6">
         <CardHeader
           title="Personal categories"

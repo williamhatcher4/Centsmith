@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BriefcaseBusiness, CheckSquare, Inbox, Search, UserRoundCheck } from 'lucide-react'
 import { transactionsApi } from '../api/transactions'
@@ -20,10 +20,19 @@ function rowDelay(i: number) {
 }
 const ROW_ANIM = 'animate-[fadeInUp_360ms_var(--ease-out)_both]'
 
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border border-[var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text-muted)]">
+      {children}
+    </kbd>
+  )
+}
+
 export function InboxPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkClass, setBulkClass] = useState<Classification | ''>('')
   const [search, setSearch] = useState('')
+  const [focusedIndex, setFocusedIndex] = useState(0)
   const qc = useQueryClient()
   const { data: transactions = [], isLoading } = useQuery({
     queryKey: ['transactions', 'unsorted'],
@@ -70,6 +79,68 @@ export function InboxPage() {
     if (selected.length && bulkClass) classify.mutate({ ids: selected.map((tx) => tx.id), classification: bulkClass })
   }
 
+  const safeFocus = filtered.length ? Math.min(focusedIndex, filtered.length - 1) : -1
+
+  // Keyboard-driven triage. Refs keep the listener stable while always reading
+  // the latest rows/cursor; shortcuts are ignored while typing in a field.
+  const filteredRef = useRef(filtered)
+  const focusedRef = useRef(safeFocus)
+  useEffect(() => {
+    filteredRef.current = filtered
+  }, [filtered])
+  useEffect(() => {
+    focusedRef.current = safeFocus
+  }, [safeFocus])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement
+      const typing = !!el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)
+      if (e.key === '/' && !typing) {
+        e.preventDefault()
+        document.getElementById('search')?.focus()
+        return
+      }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return
+      const rows = filteredRef.current
+      if (!rows.length) return
+      const idx = Math.max(0, Math.min(focusedRef.current, rows.length - 1))
+      const tx = rows[idx]
+      switch (e.key) {
+        case 'j':
+        case 'ArrowDown':
+          e.preventDefault()
+          setFocusedIndex(Math.min(idx + 1, rows.length - 1))
+          break
+        case 'k':
+        case 'ArrowUp':
+          e.preventDefault()
+          setFocusedIndex(Math.max(idx - 1, 0))
+          break
+        case 'p':
+          e.preventDefault()
+          if (tx) classify.mutate({ ids: [tx.id], classification: 'personal' })
+          break
+        case 'w':
+          e.preventDefault()
+          if (tx) classify.mutate({ ids: [tx.id], classification: 'work' })
+          break
+        case 'x':
+        case ' ':
+          e.preventDefault()
+          if (tx) toggle(tx.id)
+          break
+        case 'a':
+          e.preventDefault()
+          setSelectedIds(new Set(rows.map((r) => r.id)))
+          break
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // classify.mutate / toggle / setters are stable; refs supply fresh data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div>
       <PageHeader eyebrow="Triage" title="Inbox" subtitle="Sort imported transactions into Personal or Work" />
@@ -98,6 +169,14 @@ export function InboxPage() {
           </Button>
         </div>
       </Card>
+      <p className="mb-3 hidden items-center gap-1.5 text-xs text-[var(--text-subtle)] md:flex">
+        <span>Shortcuts:</span>
+        <Kbd>J</Kbd><Kbd>K</Kbd><span>move</span>
+        <Kbd>P</Kbd><span>personal</span>
+        <Kbd>W</Kbd><span>work</span>
+        <Kbd>X</Kbd><span>select</span>
+        <Kbd>/</Kbd><span>search</span>
+      </p>
       {isLoading ? (
         <Skeleton className="h-80" />
       ) : filtered.length === 0 ? (
@@ -125,7 +204,11 @@ export function InboxPage() {
                 {filtered.map((tx, i) => (
                   <tr
                     key={tx.id}
-                    className={cn('border-b border-[var(--border)] transition-colors duration-150 last:border-0 hover:bg-[var(--surface-muted)]', i < 16 && ROW_ANIM)}
+                    className={cn(
+                      'border-b border-[var(--border)] transition-colors duration-150 last:border-0 hover:bg-[var(--surface-muted)]',
+                      i < 16 && ROW_ANIM,
+                      i === safeFocus && 'bg-[var(--accent-soft)] ring-1 ring-inset ring-[var(--accent-ring)]',
+                    )}
                     style={rowDelay(i)}
                   >
                     <td className="px-4 py-3">

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Landmark, Plus, Trash2, Upload, X } from 'lucide-react'
 import { transactionsApi } from '../api/transactions'
@@ -146,12 +147,21 @@ function AddTransactionModal({ onClose, onSuccess }: AddTransactionModalProps) {
   )
 }
 
+function readClassificationParam(value: string | null): ClassificationFilter {
+  return value === 'personal' || value === 'work' || value === 'unsorted' ? value : 'all'
+}
+function readExpensedParam(value: string | null): ExpensedFilter {
+  return value === 'expensed' || value === 'unexpensed' ? value : 'all'
+}
+
 export function TransactionsPage() {
-  const [importMode, setImportMode] = useState<'card' | 'checking' | null>(null)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [classification, setClassification] = useState<ClassificationFilter>('all')
-  const [expensed, setExpensed] = useState<ExpensedFilter>('all')
-  const [personalCategory, setPersonalCategory] = useState('all')
+  const [searchParams] = useSearchParams()
+  const initialAction = searchParams.get('action')
+  const [importMode, setImportMode] = useState<'card' | 'checking' | null>(initialAction === 'import' ? 'card' : null)
+  const [showAddModal, setShowAddModal] = useState(initialAction === 'add')
+  const [classification, setClassification] = useState<ClassificationFilter>(() => readClassificationParam(searchParams.get('classification')))
+  const [expensed, setExpensed] = useState<ExpensedFilter>(() => readExpensedParam(searchParams.get('expensed')))
+  const [personalCategory, setPersonalCategory] = useState(() => searchParams.get('personal_category') || 'all')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const qc = useQueryClient()

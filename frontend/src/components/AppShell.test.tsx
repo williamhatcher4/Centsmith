@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { Route, Routes } from 'react-router-dom'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/server'
 import { renderWithProviders } from '../test/renderWithProviders'
@@ -113,5 +113,24 @@ describe('AppShell navigation filter', () => {
     mountAppShell('/')
     await screen.findByText('INBOX-OUTLET')
     expect(screen.queryByText('HOME-OUTLET')).toBeNull()
+  })
+
+  it('opens the command palette on Ctrl/⌘+K', async () => {
+    server.use(http.get('/api/v1/settings', () => HttpResponse.json(DEFAULT_SETTINGS)))
+    mountAppShell('/')
+    await screen.findByText('HOME-OUTLET')
+
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull()
+    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+    expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument()
+  })
+
+  it('opens the command palette from the sidebar search button', async () => {
+    server.use(http.get('/api/v1/settings', () => HttpResponse.json(DEFAULT_SETTINGS)))
+    mountAppShell('/')
+    await screen.findByText('HOME-OUTLET')
+
+    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+    expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument()
   })
 })

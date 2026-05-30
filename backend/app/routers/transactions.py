@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 import uuid
 from datetime import datetime, timezone, date
 from typing import Literal, Optional
@@ -20,6 +21,7 @@ from app.schemas.transaction import (
     DashboardSummary,
     ImportPreview,
     ImportResult,
+    MerchantSpend,
     SpendingByCategory,
     SpendingPoint,
     SpendingSummary,
@@ -59,6 +61,35 @@ def _personal_spending_filters():
             & (Transaction.personal_category.in_(list(INCOME_CATEGORIES)))
         ),
     ]
+
+
+# Merchant-name normalization for the dashboard "Top merchants" rollup.
+# SQLite string munging is brittle, so this is done in Python after fetching rows.
+_STORE_NUM_RE = re.compile(r"#\s*\d+")
+_MASKED_REF_RE = re.compile(r"\bX{2,}\d*\b", re.IGNORECASE)
+_DATE_FRAG_RE = re.compile(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b")
+_TRAILING_REF_RE = re.compile(r"\d{3,}$")
+
+
+def _normalize_merchant(description: Optional[str]) -> str:
+    """Collapse a raw bank description into a stable merchant key.
+
+    Uppercases, strips store numbers (``#1234``), masked card refs (``XXXX1234``),
+    embedded date fragments, and a trailing all-numeric auth/store code so that
+    e.g. ``STARBUCKS #1234`` and ``STARBUCKS #5678`` group together.
+    """
+    if not description:
+        return ""
+    text = description.upper()
+    text = _STORE_NUM_RE.sub(" ", text)
+    text = _MASKED_REF_RE.sub(" ", text)
+    text = _DATE_FRAG_RE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    parts = text.split(" ")
+    # Drop a trailing reference/auth number left on the tail (e.g. "AMAZON 1234567").
+    while len(parts) > 1 and _TRAILING_REF_RE.search(parts[-1]) and not any(c.isalpha() for c in parts[-1]):
+        parts.pop()
+    return " ".join(parts).strip()
 
 
 def _validate_personal_category(category: Optional[str], tx_type: str) -> None:
@@ -457,6 +488,46 @@ def dashboard(
         Transaction.personal_category.is_(None),
     ).one()
 
+    # Work money still owed back: debit work rows not yet marked expensed.
+    unexpensed_work_cents, unexpensed_work_count = db.query(
+        func.coalesce(func.sum(Transaction.amount_cents), 0),
+        func.count(Transaction.id),
+    ).filter(
+        Transaction.transaction_type == "debit",
+        Transaction.classification == "work",
+        Transaction.expensed.is_(False),
+        func.coalesce(Transaction.personal_category, "") != TRANSFER_CATEGORY,
+    ).one()
+
+    # Top merchants by personal spend over the selected window.
+    selected_month_keys = [m for m, _ in selected]
+    top_merchants: list[MerchantSpend] = []
+    if selected_month_keys:
+        merchant_rows = db.query(
+            Transaction.description,
+            Transaction.amount_cents,
+        ).filter(
+            Transaction.classification == "personal",
+            Transaction.transaction_type == "debit",
+            func.coalesce(Transaction.personal_category, "") != TRANSFER_CATEGORY,
+            func.strftime("%Y-%m", Transaction.transaction_date).in_(selected_month_keys),
+        ).all()
+        merchant_totals: dict[str, list[int]] = {}
+        for description, amount in merchant_rows:
+            name = _normalize_merchant(description)
+            if not name:
+                continue
+            bucket = merchant_totals.setdefault(name, [0, 0])
+            bucket[0] += int(amount or 0)
+            bucket[1] += 1
+        top_merchants = [
+            MerchantSpend(name=name, amount_cents=cents, count=count)
+            for name, (cents, count) in sorted(
+                merchant_totals.items(), key=lambda kv: kv[1][0], reverse=True
+            )
+            if cents > 0
+        ][:5]
+
     unsorted_count = db.query(Transaction).filter(Transaction.classification.is_(None)).count()
     latest_month = summary_months[-1].month if summary_months else None
     return DashboardSummary(
@@ -469,6 +540,9 @@ def dashboard(
         reimbursement_total_cents=reimbursement_total,
         uncategorized_income_cents=int(uncategorized_income_cents or 0),
         uncategorized_income_count=int(uncategorized_income_count or 0),
+        unexpensed_work_cents=int(unexpensed_work_cents or 0),
+        unexpensed_work_count=int(unexpensed_work_count or 0),
+        top_merchants=top_merchants,
     )
 
 
