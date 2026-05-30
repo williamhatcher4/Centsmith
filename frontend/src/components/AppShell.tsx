@@ -1,6 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { LogOut, Search } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { authApi } from '../api/auth'
 import { settingsApi } from '../api/settings'
@@ -9,6 +9,7 @@ import { Avatar, IconButton, ThemeToggle, AuroraBackground } from './ui'
 import { cn } from '../utils/cn'
 import { NAV_LINKS, visibleLinks } from '../constants/nav'
 import { useReducedMotion } from '../hooks/useReducedMotion'
+import { CommandPalette } from './CommandPalette'
 
 function BrandMark() {
   return (
@@ -35,6 +36,19 @@ export function AppShell() {
   })
   const hiddenPages = settings?.hidden_pages ?? []
   const links = visibleLinks(hiddenPages)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // Global ⌘K / Ctrl+K toggles the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Sliding active-nav indicator (desktop sidebar).
   const itemRefs = useRef<(HTMLLIElement | null)[]>([])
@@ -112,6 +126,17 @@ export function AppShell() {
             ))}
           </ul>
         </nav>
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            className="flex w-full items-center gap-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-subtle)] transition-colors hover:text-[var(--text)]"
+          >
+            <Search className="size-[18px]" />
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="rounded border border-[var(--border)] bg-[var(--surface-solid)] px-1.5 py-0.5 text-[10px] font-semibold">⌘K</kbd>
+          </button>
+        </div>
         <div className="border-t border-[var(--border)] p-3">
           <div className="flex items-center gap-2.5 rounded-[10px] px-2 py-2">
             <Avatar name={user?.display_name} />
@@ -174,6 +199,7 @@ export function AppShell() {
           ))}
         </nav>
       </div>
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} links={links} onLogout={logout} />}
     </div>
   )
 }

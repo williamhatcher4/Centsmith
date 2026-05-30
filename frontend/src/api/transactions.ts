@@ -32,7 +32,7 @@ export const transactionsApi = {
       transaction_ids: transactionIds,
       personal_category: personalCategory,
     }),
-  dashboard: () => api.get<DashboardSummary>('/api/v1/transactions/dashboard'),
+  dashboard: (months = 12) => api.get<DashboardSummary>(`/api/v1/transactions/dashboard?months=${months}`),
   personalSpending: (months = 12) => api.get<SpendingSummary>(`/api/v1/transactions/spending/personal?months=${months}`),
   personalIncome: (months = 12) => api.get<SpendingSummary>(`/api/v1/transactions/income/personal?months=${months}`),
   previewImport: async (file: File): Promise<ImportPreview> => {

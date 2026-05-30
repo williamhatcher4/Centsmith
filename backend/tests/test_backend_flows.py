@@ -397,6 +397,110 @@ def test_dashboard_personal_cents_offsets_refunds(client, db_session):
     assert dashboard["personal_total_cents"] == 4000
 
 
+def test_dashboard_awaiting_reimbursement_sums_unexpensed_work(client, db_session):
+    add_transaction(
+        db_session,
+        description="Flight",
+        amount_cents=30000,
+        transaction_type="debit",
+        classification="work",
+        expensed=False,
+    )
+    add_transaction(
+        db_session,
+        description="Hotel",
+        amount_cents=15000,
+        transaction_type="debit",
+        classification="work",
+        expensed=False,
+    )
+    add_transaction(
+        db_session,
+        description="Taxi",
+        amount_cents=2000,
+        transaction_type="debit",
+        classification="work",
+        expensed=True,
+    )
+
+    login(client)
+
+    dashboard = client.get("/api/v1/transactions/dashboard").json()
+    assert dashboard["unexpensed_work_cents"] == 45000
+    assert dashboard["unexpensed_work_count"] == 2
+
+
+def test_dashboard_top_merchants_normalizes_and_ranks(client, db_session):
+    for ref in ("#1234", "#5678"):
+        add_transaction(
+            db_session,
+            description=f"STARBUCKS {ref}",
+            amount_cents=600,
+            transaction_type="debit",
+            classification="personal",
+            personal_category="Dining",
+        )
+    add_transaction(
+        db_session,
+        description="WHOLE FOODS MKT 10455",
+        amount_cents=9000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Groceries",
+    )
+    # Transfers and work spend must not appear in personal top merchants.
+    add_transaction(
+        db_session,
+        description="CC PAYMENT 999",
+        amount_cents=50000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Transfer",
+    )
+
+    login(client)
+
+    dashboard = client.get("/api/v1/transactions/dashboard").json()
+    merchants = dashboard["top_merchants"]
+    names = [m["name"] for m in merchants]
+    assert names[0] == "WHOLE FOODS MKT"
+    assert "STARBUCKS" in names
+    assert "CC PAYMENT" not in names
+    starbucks = next(m for m in merchants if m["name"] == "STARBUCKS")
+    assert starbucks["amount_cents"] == 1200
+    assert starbucks["count"] == 2
+
+
+def test_dashboard_months_param_limits_window(client, db_session):
+    add_transaction(
+        db_session,
+        description="OLD STORE",
+        amount_cents=1000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Shopping",
+        transaction_date=date(2026, 1, 15),
+    )
+    add_transaction(
+        db_session,
+        description="NEW STORE",
+        amount_cents=2000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Shopping",
+        transaction_date=date(2026, 5, 15),
+    )
+
+    login(client)
+
+    full = client.get("/api/v1/transactions/dashboard").json()
+    assert {m["name"] for m in full["top_merchants"]} == {"OLD STORE", "NEW STORE"}
+
+    windowed = client.get("/api/v1/transactions/dashboard", params={"months": 1}).json()
+    assert len(windowed["months"]) == 1
+    assert {m["name"] for m in windowed["top_merchants"]} == {"NEW STORE"}
+
+
 def test_personal_list_includes_categorized_refund_credits(client, db_session):
     debit = add_transaction(
         db_session,

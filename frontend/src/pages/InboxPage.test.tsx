@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/server'
@@ -63,5 +63,51 @@ describe('InboxPage', () => {
 
     await waitFor(() => expect(calls.length).toBe(1))
     expect(JSON.parse(calls[0])).toMatchObject({ transaction_ids: [mockTransactions[0].id], classification: 'work' })
+  })
+
+  describe('keyboard triage', () => {
+    it('classifies the focused row with the w shortcut', async () => {
+      const calls: string[] = []
+      server.use(
+        http.post('/api/v1/transactions/bulk-classify', async ({ request }) => {
+          calls.push(await request.text())
+          return HttpResponse.json({ updated: 1 })
+        }),
+      )
+      renderWithProviders(<InboxPage />)
+      await screen.findByText('Coffee shop')
+
+      fireEvent.keyDown(window, { key: 'w' })
+      await waitFor(() => expect(calls.length).toBe(1))
+      expect(JSON.parse(calls[0])).toMatchObject({ transaction_ids: [mockTransactions[0].id], classification: 'work' })
+    })
+
+    it('focuses the search field when / is pressed', async () => {
+      renderWithProviders(<InboxPage />)
+      await screen.findByText('Coffee shop')
+
+      fireEvent.keyDown(window, { key: '/' })
+      expect(document.activeElement).toBe(screen.getByPlaceholderText('Description'))
+    })
+
+    it('does not fire shortcuts while typing in the search field', async () => {
+      const calls: string[] = []
+      server.use(
+        http.post('/api/v1/transactions/bulk-classify', async ({ request }) => {
+          calls.push(await request.text())
+          return HttpResponse.json({ updated: 1 })
+        }),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<InboxPage />)
+      await screen.findByText('Coffee shop')
+
+      const searchInput = screen.getByPlaceholderText('Description') as HTMLInputElement
+      searchInput.focus()
+      await user.type(searchInput, 'w')
+
+      expect(calls).toHaveLength(0)
+      expect(searchInput.value).toBe('w')
+    })
   })
 })

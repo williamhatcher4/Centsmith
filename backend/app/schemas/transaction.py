@@ -167,6 +167,12 @@ class DashboardMonth(BaseModel):
     reimbursement_cents: int = 0
 
 
+class MerchantSpend(BaseModel):
+    name: str
+    amount_cents: int
+    count: int
+
+
 class DashboardSummary(BaseModel):
     personal_total_cents: int
     work_total_cents: int
@@ -177,3 +183,6 @@ class DashboardSummary(BaseModel):
     reimbursement_total_cents: int = 0
     uncategorized_income_cents: int = 0
     uncategorized_income_count: int = 0
+    unexpensed_work_cents: int = 0
+    unexpensed_work_count: int = 0
+    top_merchants: list[MerchantSpend] = []

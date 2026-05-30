@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -241,5 +241,25 @@ describe('SettingsPage Pages section', () => {
     expect(screen.getByRole('checkbox', { name: 'Show Exports' })).toBeChecked()
     expect(screen.getByRole('button', { name: /save pages/i })).toBeDisabled()
     expect(putCalled).toBe(false)
+  })
+})
+
+describe('SettingsPage appearance', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.documentElement.removeAttribute('data-accent')
+  })
+
+  it('applies the selected accent color', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<SettingsPage />)
+    await screen.findByText('Appearance')
+
+    const violet = screen.getByRole('button', { name: 'Violet accent' })
+    expect(violet).toHaveAttribute('aria-pressed', 'false')
+    await user.click(violet)
+
+    expect(document.documentElement.getAttribute('data-accent')).toBe('violet')
+    expect(screen.getByRole('button', { name: 'Violet accent' })).toHaveAttribute('aria-pressed', 'true')
   })
 })

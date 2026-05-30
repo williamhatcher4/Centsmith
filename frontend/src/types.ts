@@ -107,6 +107,12 @@ export interface UserSettings {
   hidden_pages: string[]
 }
 
+export interface MerchantSpend {
+  name: string
+  amount_cents: number
+  count: number
+}
+
 export interface DashboardSummary {
   personal_total_cents: number
   work_total_cents: number
@@ -117,4 +123,7 @@ export interface DashboardSummary {
   reimbursement_total_cents: number
   uncategorized_income_cents: number
   uncategorized_income_count: number
+  unexpensed_work_cents: number
+  unexpensed_work_count: number
+  top_merchants: MerchantSpend[]
 }

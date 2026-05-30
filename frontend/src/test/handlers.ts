@@ -63,6 +63,12 @@ export const mockDashboard: DashboardSummary = {
   reimbursement_total_cents: 0,
   uncategorized_income_cents: 0,
   uncategorized_income_count: 0,
+  unexpensed_work_cents: 8000,
+  unexpensed_work_count: 2,
+  top_merchants: [
+    { name: 'WHOLE FOODS MKT', amount_cents: 30000, count: 6 },
+    { name: 'STARBUCKS', amount_cents: 1200, count: 2 },
+  ],
 }
 
 export const mockSpending: SpendingSummary = {

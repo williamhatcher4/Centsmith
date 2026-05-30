@@ -31,6 +31,33 @@ describe('TransactionsPage', () => {
     expect(screen.getByLabelText('Category')).toBeInTheDocument()
   })
 
+  it('initializes filters from URL search params (deep link)', async () => {
+    const calls: string[] = []
+    server.use(
+      http.get('/api/v1/transactions', ({ request }) => {
+        calls.push(new URL(request.url).search)
+        return HttpResponse.json([])
+      }),
+    )
+    renderWithProviders(<TransactionsPage />, { route: '/transactions?classification=work&expensed=unexpensed' })
+
+    // Type select reflects the URL, and the work-only Expensed filter is shown.
+    expect(await screen.findByLabelText('Expensed')).toBeInTheDocument()
+    expect((screen.getByLabelText('Type') as HTMLSelectElement).value).toBe('work')
+
+    await waitFor(() => {
+      const latest = calls[calls.length - 1]
+      expect(latest).toContain('classification=work')
+      expect(latest).toContain('expensed=false')
+    })
+  })
+
+  it('auto-opens the add modal from the action URL param', async () => {
+    renderWithProviders(<TransactionsPage />, { route: '/transactions?action=add' })
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText('Description')).toBeInTheDocument()
+  })
+
   it('passes start_date and end_date to the API when the user picks them', async () => {
     const calls: string[] = []
     server.use(
