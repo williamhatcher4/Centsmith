@@ -35,16 +35,18 @@ export const transactionsApi = {
   dashboard: (months = 12) => api.get<DashboardSummary>(`/api/v1/transactions/dashboard?months=${months}`),
   personalSpending: (months = 12) => api.get<SpendingSummary>(`/api/v1/transactions/spending/personal?months=${months}`),
   personalIncome: (months = 12) => api.get<SpendingSummary>(`/api/v1/transactions/income/personal?months=${months}`),
-  previewImport: async (file: File): Promise<ImportPreview> => {
+  previewImport: async (file: File, chargesPositive?: boolean): Promise<ImportPreview> => {
     const body = new FormData()
     body.append('file', file)
+    if (chargesPositive !== undefined) body.append('charges_positive', String(chargesPositive))
     const res = await fetch('/api/v1/transactions/import/preview', { method: 'POST', credentials: 'include', body })
     if (!res.ok) throw new Error((await res.json()).detail ?? 'Preview failed')
     return res.json()
   },
-  confirmImport: async (file: File): Promise<ImportResult> => {
+  confirmImport: async (file: File, chargesPositive?: boolean): Promise<ImportResult> => {
     const body = new FormData()
     body.append('file', file)
+    if (chargesPositive !== undefined) body.append('charges_positive', String(chargesPositive))
     const res = await fetch('/api/v1/transactions/import/confirm', { method: 'POST', credentials: 'include', body })
     if (!res.ok) throw new Error((await res.json()).detail ?? 'Import failed')
     return res.json()

@@ -16,6 +16,7 @@ from app.services.statement_import_service import (
     _source_hash,
     _to_cents,
     parse_statement,
+    parse_statement_ex,
 )
 
 
@@ -1054,3 +1055,107 @@ def test_parse_statement_ofx_valid_xml_without_transactions_falls_back_to_sgml()
     assert len(rows) == 1
     assert rows[0].description == "Coffee shop"
     assert rows[0].transaction_date == date(2026, 5, 1)
+
+
+# ---------------------------------------------------------------------------
+# Single Amount-column sign convention (charges-positive toggle)
+# ---------------------------------------------------------------------------
+
+def test_parse_statement_amex_csv_charges_positive_auto_detected():
+    # AmEx "formal" CSV lists charges as positive and payments as negative. The
+    # dominant positive sign auto-detects the charges-positive convention, so
+    # charges become debits and the payment becomes a credit.
+    body = (
+        b"Date,Date Processed,Description,Amount,Flexible\n"
+        b"20 Dec 2025,20 Dec 2025,Airalo,42.09,FS\n"
+        b"19 Dec 2025,19 Dec 2025,Uber,10.67,FS\n"
+        b"11 Dec 2025,11 Dec 2025,PAYMENT RECEIVED - THANK YOU,-19275.99,\n"
+    )
+    result = parse_statement_ex("amex.csv", body)
+    assert result.skipped_errors == 0
+    assert result.statement_format == FORMAT_NAMES["generic"]
+    assert result.amount_sign_adjustable is True
+    assert result.charges_positive is True
+    assert [(r.description, r.transaction_type) for r in result.rows] == [
+        ("Airalo", "debit"),
+        ("Uber", "debit"),
+        ("PAYMENT RECEIVED - THANK YOU", "credit"),
+    ]
+
+
+def test_parse_statement_amount_csv_explicit_charges_positive_overrides():
+    body = (
+        b"Date,Description,Amount\n"
+        b"2026-05-01,Coffee,4.25\n"
+        b"2026-05-02,Lunch,8.00\n"
+        b"2026-05-03,Refund,-1.00\n"
+    )
+    # Auto: dominant positive (2 charges vs 1 refund) -> charges-positive -> Coffee is a debit.
+    auto = parse_statement_ex("s.csv", body)
+    assert auto.charges_positive is True
+    assert auto.rows[0].transaction_type == "debit"
+    # Forcing charges-negative keeps a positive Amount as a credit.
+    forced = parse_statement_ex("s.csv", body, charges_positive=False)
+    assert forced.charges_positive is False
+    assert forced.rows[0].transaction_type == "credit"
+
+
+def test_parse_statement_amount_csv_charges_negative_default_preserved():
+    # Standard bank CSV (charges-negative dominant) is unchanged.
+    body = (
+        b"Date,Description,Amount\n"
+        b"2026-05-01,Coffee,-5.50\n"
+        b"2026-05-02,Salary,2500.00\n"
+        b"2026-05-03,Groceries,-85.20\n"
+    )
+    result = parse_statement_ex("s.csv", body)
+    assert result.amount_sign_adjustable is True
+    assert result.charges_positive is False
+    assert [(r.description, r.transaction_type) for r in result.rows] == [
+        ("Coffee", "debit"),
+        ("Salary", "credit"),
+        ("Groceries", "debit"),
+    ]
+
+
+def test_amount_sign_not_adjustable_for_debit_credit_columns():
+    body = b"Date,Description,Debit,Credit\n2026-05-01,Coffee,4.25,\n"
+    result = parse_statement_ex("s.csv", body)
+    assert result.amount_sign_adjustable is False
+
+
+def test_amount_sign_not_adjustable_for_headerless_csv():
+    body = b"2026-05-01,Coffee,4.25,\n"
+    result = parse_statement_ex("s.csv", body)
+    assert result.amount_sign_adjustable is False
+
+
+def test_amount_sign_not_adjustable_for_ofx():
+    result = parse_statement_ex("statement.ofx", _OFX_SGML)
+    assert result.amount_sign_adjustable is False
+
+
+def test_amount_sign_not_adjustable_for_checking_csv():
+    body = (
+        b"Date,Description,Amount\n"
+        b"2026-05-01,Paycheck,1000.00\n"
+        b"2026-05-02,Rent,-1200.00\n"
+    )
+    result = parse_statement_ex("s.csv", body, source="checking")
+    assert result.amount_sign_adjustable is False
+    # Checking preserves the signed amount regardless of dominant sign.
+    assert [(r.description, r.transaction_type) for r in result.rows] == [
+        ("Paycheck", "credit"),
+        ("Rent", "debit"),
+    ]
+
+
+def test_amount_sign_adjustable_for_amex_xlsx():
+    content = _make_xlsx(
+        ["Date", "Description", "Amount"],
+        [["05/01/2026", "Coffee", 4.25], ["05/02/2026", "Uber", 9.50]],
+    )
+    result = parse_statement_ex("statement.xlsx", content)
+    assert result.amount_sign_adjustable is True
+    assert result.charges_positive is True
+    assert [r.transaction_type for r in result.rows] == ["debit", "debit"]

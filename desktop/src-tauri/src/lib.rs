@@ -271,6 +271,7 @@ async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
     const PROGRESS_LOG_INTERVAL: usize = 1024 * 1024; // 1 MiB
     let mut downloaded = 0usize;
     let mut next_log_at = PROGRESS_LOG_INTERVAL;
+    let app_for_install = app.clone();
     update
         .download_and_install(
             |chunk_length, content_length| {
@@ -283,14 +284,16 @@ async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
                     next_log_at = downloaded + PROGRESS_LOG_INTERVAL;
                 }
             },
-            || {
-                debug_log("update download finished");
+            move || {
+                // Stop the backend before NSIS runs so it releases its lock on
+                // DLLs inside resources/backend/_internal/ (e.g. VCRUNTIME140.dll).
+                debug_log("update download finished, stopping backend before install");
+                stop_backend(&app_for_install);
             },
         )
         .await?;
 
     debug_log("update installed, restarting app");
-    stop_backend(&app);
     app.restart();
 }
 

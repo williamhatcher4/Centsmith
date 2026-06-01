@@ -88,6 +88,7 @@ AGENTS.md
 CLAUDE.md
 commands_to_run_tests.md
 RELEASE_NOTES.md
+RELEASE_NOTES_WEB.md
 
 # Loose data files dropped in the repo root (statements, exports, etc.)
 /*.csv
@@ -100,3 +101,6 @@ RELEASE_NOTES.md
 #vault
 .obsidian/
 *.canvas
+
+#statements
+statements/

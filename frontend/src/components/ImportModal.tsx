@@ -20,6 +20,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [chargesPositive, setChargesPositive] = useState<boolean | undefined>(undefined)
 
   const isChecking = mode === 'checking'
   const step = result ? 'done' : preview ? 'preview' : 'upload'
@@ -46,9 +47,25 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
         ? await transactionsApi.previewCheckingImport(nextFile)
         : await transactionsApi.previewImport(nextFile)
       setPreview(preview)
+      setChargesPositive(preview.charges_positive)
     } catch (err) {
       setError((err as Error).message)
       setFile(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function applySign(next: boolean) {
+    if (!file) return
+    setChargesPositive(next)
+    setLoading(true)
+    setError('')
+    try {
+      const updated = await transactionsApi.previewImport(file, next)
+      setPreview(updated)
+    } catch (err) {
+      setError((err as Error).message)
     } finally {
       setLoading(false)
     }
@@ -69,7 +86,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
     try {
       const next = isChecking
         ? await transactionsApi.confirmCheckingImport(file)
-        : await transactionsApi.confirmImport(file)
+        : await transactionsApi.confirmImport(file, chargesPositive)
       setResult(next)
       invalidateImportQueries()
       if (next.imported > 0 && next.batch_id) {
@@ -102,6 +119,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
     setPreview(null)
     setResult(null)
     setError('')
+    setChargesPositive(undefined)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -127,6 +145,15 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
             <div><div className="text-[11px] uppercase text-[var(--text-faint)]">Rows</div><div className="font-semibold">{preview.total}</div></div>
             {preview.skipped_errors > 0 && <div><div className="text-[11px] uppercase text-[var(--text-faint)]">Skipped</div><div className="font-semibold text-[var(--danger)]">{preview.skipped_errors}</div></div>}
           </div>
+          {!isChecking && preview.amount_sign_adjustable && (
+            <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-[8px] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-sm">
+              <input type="checkbox" checked={chargesPositive ?? false} disabled={loading} onChange={(e) => applySign(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
+              <span>
+                <span className="font-medium text-[var(--text)]">Charges are shown as positive (AmEx-style)</span>
+                <span className="mt-0.5 block text-xs text-[var(--text-subtle)]">Turn on if purchases are positive numbers and payments/refunds are negative in your file.</span>
+              </span>
+            </label>
+          )}
           <div className="max-h-[420px] overflow-auto rounded-[8px] border border-[var(--border)]">
             <table className="w-full text-sm"><thead className="sticky top-0 bg-[var(--surface-solid)]"><tr className="border-b border-[var(--border)] text-left text-[11px] uppercase text-[var(--text-subtle)]"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Description</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2">Status</th></tr></thead><tbody>
               {preview.rows.map((row) => { const repeat = repeatInfo.get(row.row_number); return <tr key={row.row_number} className={cn('border-b border-[var(--border)] last:border-0', row.is_duplicate && 'opacity-50')}><td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-subtle)]">{row.date}</td><td className="max-w-[260px] truncate px-3 py-2 font-medium">{row.description}</td><td className={cn('whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums', row.transaction_type === 'credit' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>{signedMoney(row.amount_cents, row.transaction_type)}</td><td className="px-3 py-2"><div className="flex flex-wrap items-center gap-1.5">{row.is_duplicate ? <Badge tone="muted">duplicate</Badge> : <Badge tone="success">new</Badge>}{repeat && <Badge tone="muted">repeat in file ({repeat.index} of {repeat.size})</Badge>}</div></td></tr> })}

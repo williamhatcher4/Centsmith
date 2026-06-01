@@ -50,6 +50,8 @@ export interface ImportPreview {
   to_import: number
   statement_format: string
   skipped_errors: number
+  amount_sign_adjustable: boolean
+  charges_positive: boolean
 }
 
 export interface ImportResult {

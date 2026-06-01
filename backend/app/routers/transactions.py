@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import datetime, timezone, date
 from typing import Literal, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
@@ -196,12 +196,13 @@ def list_transactions(
 @router.post("/import/preview", response_model=ImportPreview)
 async def preview_import(
     file: UploadFile = File(...),
+    charges_positive: Optional[bool] = Form(None),
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
         raw = await read_limited_upload(file)
-        return preview_statement_import(db, raw, file.filename or "statement.csv", "card")
+        return preview_statement_import(db, raw, file.filename or "statement.csv", "card", charges_positive)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -209,12 +210,13 @@ async def preview_import(
 @router.post("/import/confirm", response_model=ImportResult)
 async def confirm_import(
     file: UploadFile = File(...),
+    charges_positive: Optional[bool] = Form(None),
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
         raw = await read_limited_upload(file)
-        return confirm_statement_import(db, raw, file.filename or "statement.csv", "card")
+        return confirm_statement_import(db, raw, file.filename or "statement.csv", "card", charges_positive)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
