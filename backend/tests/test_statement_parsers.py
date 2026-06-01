@@ -1159,3 +1159,28 @@ def test_amount_sign_adjustable_for_amex_xlsx():
     assert result.amount_sign_adjustable is True
     assert result.charges_positive is True
     assert [r.transaction_type for r in result.rows] == ["debit", "debit"]
+
+
+# ---------------------------------------------------------------------------
+# Real-shaped AmEx XLS fixture (preamble + summary block + wide header at row 11)
+# ---------------------------------------------------------------------------
+
+def test_parse_statement_real_amex_xls_fixture():
+    # A sanitized copy of a real AmEx export: the transaction header sits at row
+    # 11 beneath a preamble and a "Summary" block whose Total column holds
+    # $-amounts, and the 10-column header has aliases competing with Date,
+    # Description and Amount. The parser must locate the real header, pick the
+    # right columns, strip padded descriptions, parse $/comma/period-date values,
+    # and auto-detect the charges-positive convention.
+    from amex_fixture import EXPECTED_PARSED, FIXTURE_PATH
+
+    result = parse_statement_ex("amex_sanitized.xls", FIXTURE_PATH.read_bytes())
+
+    assert result.statement_format == FORMAT_NAMES["amex_xls"]
+    assert result.skipped_errors == 0
+    assert result.amount_sign_adjustable is True
+    assert result.charges_positive is True
+    assert [
+        (r.description, r.transaction_type, r.amount_cents, r.transaction_date)
+        for r in result.rows
+    ] == EXPECTED_PARSED
