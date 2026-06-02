@@ -1055,3 +1055,64 @@ def test_migrations_upgrade_existing_sqlite_database_missing_new_columns(tmp_pat
     transaction_columns = {column["name"] for column in inspector.get_columns("transactions")}
     assert {"expensed", "personal_category"}.issubset(transaction_columns)
     assert "alembic_version" in inspector.get_table_names()
+
+
+def test_amex_xls_end_to_end_spending_and_income(client, db_session):
+    # End-to-end: import a real-shaped AmEx XLS (preamble + summary block +
+    # wide header at row 11), classify and categorize the rows the way a user
+    # would, then confirm the resulting Spending and Income totals are correct.
+    from amex_fixture import (
+        CATEGORY_ASSIGNMENTS,
+        EXPECTED_IGNORED_CREDITS,
+        EXPECTED_IMPORTED,
+        EXPECTED_INCOME_CENTS,
+        EXPECTED_SPENDING_BY_CATEGORY,
+        EXPECTED_SPENDING_CENTS,
+        FIXTURE_PATH,
+    )
+
+    login(client)
+
+    confirm = client.post(
+        "/api/v1/transactions/import/confirm",
+        files={"file": ("amex_sanitized.xls", FIXTURE_PATH.read_bytes(), "application/vnd.ms-excel")},
+    )
+    assert confirm.status_code == 200
+    body = confirm.json()
+    assert {k: body[k] for k in ("imported", "ignored_credits", "skipped", "skipped_errors")} == {
+        "imported": EXPECTED_IMPORTED,
+        "ignored_credits": EXPECTED_IGNORED_CREDITS,
+        "skipped": 0,
+        "skipped_errors": 0,
+    }
+
+    # Imported card rows arrive unclassified; classify them all personal, then
+    # categorize by description the way the inbox flow would.
+    imported = db_session.query(Transaction).all()
+    assert len(imported) == EXPECTED_IMPORTED
+    ids_by_description: dict[str, list[int]] = {}
+    for tx in imported:
+        ids_by_description.setdefault(tx.description, []).append(tx.id)
+
+    assert client.post(
+        "/api/v1/transactions/bulk-classify",
+        json={"transaction_ids": [tx.id for tx in imported], "classification": "personal"},
+    ).status_code == 200
+
+    for category, descriptions in CATEGORY_ASSIGNMENTS.items():
+        ids = [tx_id for desc in descriptions for tx_id in ids_by_description.get(desc, [])]
+        assert ids, f"no imported rows for {category}"
+        assert client.post(
+            "/api/v1/transactions/bulk-categorize-personal",
+            json={"transaction_ids": ids, "personal_category": category},
+        ).status_code == 200
+
+    spending = client.get("/api/v1/transactions/spending/personal", params={"months": 12}).json()
+    assert spending["total_cents"] == EXPECTED_SPENDING_CENTS
+    assert {row["category_name"]: row["amount_cents"] for row in spending["by_category"]} == EXPECTED_SPENDING_BY_CATEGORY
+
+    income = client.get("/api/v1/transactions/income/personal", params={"months": 12}).json()
+    assert income["total_cents"] == EXPECTED_INCOME_CENTS
+
+    dashboard = client.get("/api/v1/transactions/dashboard", params={"months": 12}).json()
+    assert dashboard["personal_total_cents"] == EXPECTED_SPENDING_CENTS

@@ -113,6 +113,11 @@ class ImportPreview(BaseModel):
     to_import: int
     statement_format: str
     skipped_errors: int = 0
+    # True when the file used a single signed Amount column on a card statement,
+    # so the charges-positive vs charges-negative convention can be toggled.
+    amount_sign_adjustable: bool = False
+    # The sign convention applied to this preview (True => charges shown positive).
+    charges_positive: bool = False
 
 
 class ImportResult(BaseModel):

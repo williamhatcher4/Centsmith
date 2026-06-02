@@ -43,6 +43,44 @@ class ParsedRow:
     source_hash: str
 
 
+@dataclass
+class StatementParseResult:
+    rows: list[ParsedRow]
+    statement_format: str
+    skipped_errors: int
+    # True when the file was read through a single signed "Amount" column on a
+    # card statement, where charges-positive vs charges-negative is ambiguous and
+    # the user can override the convention from the import preview.
+    amount_sign_adjustable: bool = False
+    # The convention actually applied: True => charges shown as positive (inverted
+    # so charges become debits); False => charges shown as negative (kept as-is).
+    charges_positive: bool = False
+
+
+def _resolve_charges_positive(
+    amounts: list[Decimal],
+    explicit: Optional[bool],
+    legacy_default: bool,
+) -> bool:
+    """Decide whether a single Amount column lists charges as positive.
+
+    An explicit user choice always wins. Otherwise auto-detect from the file's
+    dominant sign (cards are overwhelmingly charges): more positives than
+    negatives => charges-positive; more negatives => charges-negative. On a tie
+    fall back to the path's historical default so existing imports/tests are
+    unchanged.
+    """
+    if explicit is not None:
+        return explicit
+    positives = sum(1 for amount in amounts if amount > 0)
+    negatives = sum(1 for amount in amounts if amount < 0)
+    if positives > negatives:
+        return True
+    if negatives > positives:
+        return False
+    return legacy_default
+
+
 def _parse_date(raw: object) -> date:
     if isinstance(raw, datetime):
         return raw.date()
@@ -207,6 +245,7 @@ def _spreadsheet_signed_amount(
     debit_col: Optional[int],
     credit_col: Optional[int],
     source: str,
+    invert_amount: bool = True,
 ) -> Decimal:
     if _populated_cell(cells, credit_col):
         credit_amount = _parse_amount(_cell(cells, credit_col))
@@ -218,14 +257,47 @@ def _spreadsheet_signed_amount(
 
     if _populated_cell(cells, amount_col):
         amount = _parse_amount(_cell(cells, amount_col))
-        # Card statements use a magnitude-only Amount column (charges positive),
-        # so invert. But when the file also has split debit/credit columns, the
-        # Amount column is already signed — never invert it.
+        # When the file also has split debit/credit columns the Amount column is
+        # already signed — never invert it.
         if source == "checking" or debit_col is not None or credit_col is not None:
             return amount
-        return -amount
+        # Single Amount column on a card statement: invert only when charges are
+        # listed as positive (the resolved convention). Defaults to inverting to
+        # preserve the historical AmEx-style behavior for callers that don't pass
+        # an explicit decision.
+        return -amount if invert_amount else amount
 
     raise ValueError("row has no amount, debit, or credit value")
+
+
+def _resolve_spreadsheet_amount_sign(
+    data_rows: list,
+    amount_col: Optional[int],
+    debit_col: Optional[int],
+    credit_col: Optional[int],
+    source: str,
+    charges_positive: Optional[bool],
+) -> tuple[bool, bool]:
+    """Return (amount_sign_adjustable, charges_positive) for spreadsheet rows.
+
+    Only a single signed Amount column on a card statement is adjustable; split
+    debit/credit columns and checking imports carry an unambiguous sign. The
+    historical default for card spreadsheets is charges-positive (invert).
+    """
+    amount_only = (
+        amount_col is not None and debit_col is None and credit_col is None and source != "checking"
+    )
+    if not amount_only:
+        return False, False
+    amounts: list[Decimal] = []
+    for cells in data_rows:
+        if not _populated_cell(cells, amount_col):
+            continue
+        try:
+            amounts.append(_parse_amount(_cell(cells, amount_col)))
+        except Exception:
+            continue
+    return True, _resolve_charges_positive(amounts, charges_positive, legacy_default=True)
 
 
 def _col(row: dict, *names: str) -> Optional[str]:
@@ -267,7 +339,9 @@ def _detect_delimiter(text: str) -> str:
     return best_delim
 
 
-def _parse_csv(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
+def _parse_csv(
+    raw: bytes, source: str = "card", charges_positive: Optional[bool] = None
+) -> StatementParseResult:
     text = raw.decode("utf-8-sig", errors="replace")
 
     delimiter = _detect_delimiter(text)
@@ -291,12 +365,37 @@ def _parse_csv(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
             except Exception:
                 errors += 1
         fmt = FORMAT_NAMES["checking"] if source == "checking" else FORMAT_NAMES["accountactivity"]
-        return rows, fmt, errors
+        return StatementParseResult(rows, fmt, errors)
 
     reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     if not reader.fieldnames:
-        return [], "Unknown", 0
-    for i, record in enumerate(reader, start=2):
+        return StatementParseResult([], "Unknown", 0)
+
+    # A single signed Amount column (no split debit/credit) on a card statement is
+    # the ambiguous case: AmEx-style exports list charges as positive, most banks
+    # list them as negative. Resolve the convention from the dominant sign (or an
+    # explicit user override) and expose it so the import preview can offer a toggle.
+    normalized_fields = [_normalize_hdr(name) for name in reader.fieldnames]
+    _, _, amount_col, debit_col, credit_col = _statement_columns(normalized_fields)
+    amount_only = amount_col is not None and debit_col is None and credit_col is None
+    adjustable = amount_only and source != "checking"
+
+    records = list(reader)
+
+    resolved_cp = False
+    if adjustable:
+        amounts: list[Decimal] = []
+        for record in records:
+            raw_amount = _col(record, *AMOUNT_ALIASES)
+            if not _col(record, *DATE_ALIASES) or not raw_amount:
+                continue
+            try:
+                amounts.append(_parse_amount(raw_amount))
+            except Exception:
+                continue
+        resolved_cp = _resolve_charges_positive(amounts, charges_positive, legacy_default=False)
+
+    for i, record in enumerate(records, start=2):
         raw_date = _col(record, *DATE_ALIASES)
         desc = _col(record, *DESCRIPTION_ALIASES) or ""
         debit = _col(record, *DEBIT_ALIASES)
@@ -311,6 +410,8 @@ def _parse_csv(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
                 signed = c if c else -abs(d)
             elif amount:
                 signed = _parse_amount(amount)
+                if adjustable and resolved_cp:
+                    signed = -signed
             else:
                 continue
             parsed = _row(_parse_date(raw_date), desc, signed, i, source)
@@ -319,10 +420,12 @@ def _parse_csv(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
         except Exception:
             errors += 1
     fmt = FORMAT_NAMES["checking"] if source == "checking" else FORMAT_NAMES["generic"]
-    return rows, fmt, errors
+    return StatementParseResult(rows, fmt, errors, adjustable, resolved_cp)
 
 
-def _parse_xls(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
+def _parse_xls(
+    raw: bytes, source: str = "card", charges_positive: Optional[bool] = None
+) -> StatementParseResult:
     try:
         import xlrd
     except ImportError as exc:
@@ -345,6 +448,9 @@ def _parse_xls(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
         raise ValueError("Could not find a transaction header row in the XLS file")
 
     date_col, desc_col, amount_col, debit_col, credit_col = columns
+    adjustable, resolved_cp = _resolve_spreadsheet_amount_sign(
+        data[header_index + 1 :], amount_col, debit_col, credit_col, source, charges_positive
+    )
 
     rows: list[ParsedRow] = []
     errors = 0
@@ -363,17 +469,21 @@ def _parse_xls(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
                 tx_date = xlrd.xldate_as_datetime(raw_date, book.datemode).date()
             else:
                 tx_date = _parse_date(raw_date)
-            amount = _spreadsheet_signed_amount(cells, amount_col, debit_col, credit_col, source)
+            amount = _spreadsheet_signed_amount(
+                cells, amount_col, debit_col, credit_col, source, invert_amount=resolved_cp
+            )
             parsed = _row(tx_date, str(cells[desc_col]), amount, row_number, source)
             if parsed:
                 rows.append(parsed)
         except Exception:
             errors += 1
     fmt = FORMAT_NAMES["checking"] if source == "checking" else FORMAT_NAMES["amex_xls"]
-    return rows, fmt, errors
+    return StatementParseResult(rows, fmt, errors, adjustable, resolved_cp)
 
 
-def _parse_xlsx(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
+def _parse_xlsx(
+    raw: bytes, source: str = "card", charges_positive: Optional[bool] = None
+) -> StatementParseResult:
     try:
         import openpyxl
     except ImportError as exc:
@@ -399,6 +509,9 @@ def _parse_xlsx(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str,
         raise ValueError("Could not find a transaction header row in the XLSX file")
 
     date_col, desc_col, amount_col, debit_col, credit_col = columns
+    adjustable, resolved_cp = _resolve_spreadsheet_amount_sign(
+        data[header_index + 1 :], amount_col, debit_col, credit_col, source, charges_positive
+    )
 
     rows: list[ParsedRow] = []
     errors = 0
@@ -413,14 +526,16 @@ def _parse_xlsx(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str,
             continue
         try:
             tx_date = _parse_date(cells[date_col])
-            amount = _spreadsheet_signed_amount(cells, amount_col, debit_col, credit_col, source)
+            amount = _spreadsheet_signed_amount(
+                cells, amount_col, debit_col, credit_col, source, invert_amount=resolved_cp
+            )
             parsed = _row(tx_date, str(cells[desc_col]) if cells[desc_col] is not None else "", amount, row_number, source)
             if parsed:
                 rows.append(parsed)
         except Exception:
             errors += 1
     fmt = FORMAT_NAMES["checking"] if source == "checking" else FORMAT_NAMES["xlsx"]
-    return rows, fmt, errors
+    return StatementParseResult(rows, fmt, errors, adjustable, resolved_cp)
 
 
 def _parse_ofx_date(raw: str) -> date:
@@ -430,7 +545,7 @@ def _parse_ofx_date(raw: str) -> date:
     raise ValueError(f"Cannot parse OFX date: {raw!r}")
 
 
-def _parse_ofx(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
+def _parse_ofx(raw: bytes, source: str = "card") -> StatementParseResult:
     text = raw.decode("utf-8-sig", errors="replace").strip()
     rows: list[ParsedRow] = []
     errors = 0
@@ -487,7 +602,7 @@ def _parse_ofx(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
         except ET.ParseError as exc:
             if not text.startswith("<?xml"):
                 rows, errors = parse_sgml_transactions()
-                return rows, FORMAT_NAMES["ofx"], errors
+                return StatementParseResult(rows, FORMAT_NAMES["ofx"], errors)
             raise ValueError(f"Could not parse OFX file as XML: {exc}") from exc
 
         def _local(tag: str) -> str:
@@ -506,7 +621,7 @@ def _parse_ofx(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
             # tripped is_xml), but the real transactions are SGML-style elsewhere
             # in the buffer. Recover them via SGML parsing instead of reporting 0.
             rows, errors = parse_sgml_transactions()
-            return rows, FORMAT_NAMES["ofx"], errors
+            return StatementParseResult(rows, FORMAT_NAMES["ofx"], errors)
         for row_number, trn in enumerate(trn_elements, start=1):
             date_str = _child_text(trn, "DTPOSTED", "DTUSER")
             amount_str = _child_text(trn, "TRNAMT")
@@ -524,18 +639,27 @@ def _parse_ofx(raw: bytes, source: str = "card") -> tuple[list[ParsedRow], str, 
     else:
         rows, errors = parse_sgml_transactions()
 
-    return rows, FORMAT_NAMES["ofx"], errors
+    return StatementParseResult(rows, FORMAT_NAMES["ofx"], errors)
 
 
-def parse_statement(filename: str, content: bytes, source: str = "card") -> tuple[list[ParsedRow], str, int]:
+def parse_statement_ex(
+    filename: str, content: bytes, source: str = "card", charges_positive: Optional[bool] = None
+) -> StatementParseResult:
     suffix = filename.lower().rsplit(".", 1)[-1]
     if suffix == "xls":
-        rows, fmt, errors = _parse_xls(content, source)
+        result = _parse_xls(content, source, charges_positive)
     elif suffix == "xlsx":
-        rows, fmt, errors = _parse_xlsx(content, source)
+        result = _parse_xlsx(content, source, charges_positive)
     elif suffix in ("ofx", "qfx"):
-        rows, fmt, errors = _parse_ofx(content, source)
+        result = _parse_ofx(content, source)
     else:
-        rows, fmt, errors = _parse_csv(content, source)
-    _assign_occurrences(rows, source)
-    return rows, fmt, errors
+        result = _parse_csv(content, source, charges_positive)
+    _assign_occurrences(result.rows, source)
+    return result
+
+
+def parse_statement(
+    filename: str, content: bytes, source: str = "card", charges_positive: Optional[bool] = None
+) -> tuple[list[ParsedRow], str, int]:
+    result = parse_statement_ex(filename, content, source, charges_positive)
+    return result.rows, result.statement_format, result.skipped_errors

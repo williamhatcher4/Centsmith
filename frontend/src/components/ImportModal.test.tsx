@@ -28,6 +28,8 @@ const PREVIEW_PAYLOAD = {
   to_import: 1,
   statement_format: 'Account Activity CSV',
   skipped_errors: 0,
+  amount_sign_adjustable: false,
+  charges_positive: false,
 }
 
 describe('ImportModal Phase 2 undo flow', () => {
@@ -132,5 +134,88 @@ describe('ImportModal Phase 2 undo flow', () => {
 
     await screen.findByText(/0 transactions imported/i)
     expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('ImportModal charges-positive sign toggle', () => {
+  const adjustablePayload = {
+    ...PREVIEW_PAYLOAD,
+    amount_sign_adjustable: true,
+    charges_positive: true,
+  }
+
+  it('hides the sign toggle when the file is not adjustable', async () => {
+    server.use(
+      http.post('/api/v1/transactions/import/preview', () => HttpResponse.json(PREVIEW_PAYLOAD)),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+    await screen.findByText(/To import/i)
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  // Reading request.formData() is flaky for multipart bodies under jsdom, so we
+  // assert against the raw multipart body text instead.
+  function readChargesPositive(body: string): string | null {
+    const match = body.match(/name="charges_positive"[\r\n]+([^\r\n]+)/)
+    return match ? match[1].trim() : null
+  }
+
+  it('shows the toggle and re-previews with the chosen sign when flipped', async () => {
+    let lastChargesPositive: string | null = 'unset'
+    server.use(
+      http.post('/api/v1/transactions/import/preview', async ({ request }) => {
+        const cp = readChargesPositive(await request.text())
+        lastChargesPositive = cp
+        const chargesPositive = cp === null ? true : cp === 'true'
+        return HttpResponse.json({
+          ...adjustablePayload,
+          charges_positive: chargesPositive,
+          rows: [{ ...PREVIEW_PAYLOAD.rows[0], transaction_type: chargesPositive ? 'debit' : 'credit' }],
+        })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+    await screen.findByText(/To import/i)
+
+    const checkbox = screen.getByRole('checkbox') as HTMLInputElement
+    expect(checkbox.checked).toBe(true)
+
+    await user.click(checkbox)
+    await waitFor(() => expect(lastChargesPositive).toBe('false'))
+  })
+
+  it('sends the chosen sign convention to confirm', async () => {
+    let confirmChargesPositive: string | null = 'unset'
+    server.use(
+      http.post('/api/v1/transactions/import/preview', () => HttpResponse.json(adjustablePayload)),
+      http.post('/api/v1/transactions/import/confirm', async ({ request }) => {
+        confirmChargesPositive = readChargesPositive(await request.text())
+        return HttpResponse.json({
+          imported: 1,
+          skipped: 0,
+          ignored_credits: 0,
+          skipped_errors: 0,
+          batch_id: 'batch-1',
+        })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+    await screen.findByText(/To import/i)
+    // The auto-detected convention must be reflected before confirming.
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true)
+    await user.click(screen.getByRole('button', { name: /Import 1/i }))
+
+    await waitFor(() => expect(confirmChargesPositive).toBe('true'))
   })
 })

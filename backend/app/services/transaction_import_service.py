@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 from app.models.import_batch import ImportBatch
 from app.models.transaction import Transaction
 from app.schemas.transaction import ImportPreview, ImportPreviewRow, ImportResult
-from app.services.statement_import_service import ParsedRow, parse_statement
+from app.services.statement_import_service import (
+    ParsedRow,
+    StatementParseResult,
+    parse_statement_ex,
+)
 
 ImportSource = Literal["card", "checking"]
 
@@ -53,14 +57,19 @@ def _existing_hashes(db: Session, rows: list[ParsedRow]) -> set[str]:
     return {h for (h,) in db.query(Transaction.source_hash).filter(Transaction.source_hash.in_(hashes)).all()}
 
 
-def _parse(raw: bytes, filename: str, source: ImportSource) -> tuple[list[ParsedRow], str, int]:
+def _parse(
+    raw: bytes, filename: str, source: ImportSource, charges_positive: Optional[bool] = None
+) -> StatementParseResult:
     if source == "checking":
-        return parse_statement(filename or "checking.csv", raw, source="checking")
-    return parse_statement(filename or "statement.csv", raw)
+        return parse_statement_ex(filename or "checking.csv", raw, source="checking", charges_positive=charges_positive)
+    return parse_statement_ex(filename or "statement.csv", raw, charges_positive=charges_positive)
 
 
-def preview_import(db: Session, raw: bytes, filename: str, source: ImportSource) -> ImportPreview:
-    rows, fmt, skipped_errors = _parse(raw, filename, source)
+def preview_import(
+    db: Session, raw: bytes, filename: str, source: ImportSource, charges_positive: Optional[bool] = None
+) -> ImportPreview:
+    result = _parse(raw, filename, source, charges_positive)
+    rows = result.rows
     import_rows, ignored_credits = _rows_for_source(rows, source)
     existing = _existing_hashes(db, import_rows)
     preview_rows = [
@@ -81,13 +90,20 @@ def preview_import(db: Session, raw: bytes, filename: str, source: ImportSource)
         duplicates=duplicates,
         ignored_credits=ignored_credits,
         to_import=len(preview_rows) - duplicates,
-        statement_format=fmt,
-        skipped_errors=skipped_errors,
+        statement_format=result.statement_format,
+        skipped_errors=result.skipped_errors,
+        amount_sign_adjustable=result.amount_sign_adjustable,
+        charges_positive=result.charges_positive,
     )
 
 
-def confirm_import(db: Session, raw: bytes, filename: str, source: ImportSource) -> ImportResult:
-    rows, fmt, skipped_errors = _parse(raw, filename, source)
+def confirm_import(
+    db: Session, raw: bytes, filename: str, source: ImportSource, charges_positive: Optional[bool] = None
+) -> ImportResult:
+    result = _parse(raw, filename, source, charges_positive)
+    rows = result.rows
+    fmt = result.statement_format
+    skipped_errors = result.skipped_errors
     import_rows, ignored_credits = _rows_for_source(rows, source)
     existing = _existing_hashes(db, import_rows)
     imported = skipped = 0

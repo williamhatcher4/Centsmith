@@ -17,6 +17,9 @@ use tauri_plugin_updater::UpdaterExt;
 
 struct BackendProcess(Mutex<Option<Child>>);
 struct DesktopToken(Mutex<Option<String>>);
+// Store the raw HANDLE as usize so it is Send + Sync without a wrapper type.
+#[cfg(windows)]
+struct BackendJob(Mutex<Option<usize>>);
 
 const BACKEND_DIR_NAME: &str = "backend";
 const BACKEND_EXE_NAME: &str = "centsmith-backend.exe";
@@ -135,6 +138,50 @@ fn spawn_backend(app: &AppHandle) -> Result<Child, String> {
         .map_err(|e| format!("failed to spawn backend: {e}"))
 }
 
+#[cfg(windows)]
+fn assign_to_job(child: &Child) -> Option<usize> {
+    use std::mem::{size_of, zeroed};
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            debug_log("CreateJobObjectW failed");
+            return None;
+        }
+
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        if SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const _,
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        ) == 0
+        {
+            debug_log("SetInformationJobObject failed");
+            CloseHandle(job);
+            return None;
+        }
+
+        if AssignProcessToJobObject(job, child.as_raw_handle()) == 0 {
+            debug_log("AssignProcessToJobObject failed");
+            CloseHandle(job);
+            return None;
+        }
+
+        debug_log("backend assigned to job object (KILL_ON_JOB_CLOSE)");
+        Some(job as usize)
+    }
+}
+
 fn read_runtime_metadata(timeout: Duration) -> Result<RuntimeMetadata, String> {
     let runtime_file = user_data_dir().join(RUNTIME_FILE_NAME);
     let deadline = Instant::now() + timeout;
@@ -223,6 +270,15 @@ fn navigate_to_backend(app: AppHandle) {
 }
 
 fn stop_backend(app: &AppHandle) {
+    #[cfg(windows)]
+    if let Some(state) = app.try_state::<BackendJob>() {
+        if let Some(raw) = state.0.lock().unwrap().take() {
+            use windows_sys::Win32::Foundation::CloseHandle;
+            debug_log("closing job handle (kills backend)");
+            unsafe { CloseHandle(raw as *mut core::ffi::c_void); }
+        }
+    }
+
     if let Some(state) = app.try_state::<BackendProcess>() {
         if let Some(mut child) = state.0.lock().unwrap().take() {
             debug_log("stopping backend process");
@@ -271,6 +327,7 @@ async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
     const PROGRESS_LOG_INTERVAL: usize = 1024 * 1024; // 1 MiB
     let mut downloaded = 0usize;
     let mut next_log_at = PROGRESS_LOG_INTERVAL;
+    let app_for_install = app.clone();
     update
         .download_and_install(
             |chunk_length, content_length| {
@@ -283,14 +340,16 @@ async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
                     next_log_at = downloaded + PROGRESS_LOG_INTERVAL;
                 }
             },
-            || {
-                debug_log("update download finished");
+            move || {
+                // Stop the backend before NSIS runs so it releases its lock on
+                // DLLs inside resources/backend/_internal/ (e.g. VCRUNTIME140.dll).
+                debug_log("update download finished, stopping backend before install");
+                stop_backend(&app_for_install);
             },
         )
         .await?;
 
     debug_log("update installed, restarting app");
-    stop_backend(&app);
     app.restart();
 }
 
@@ -309,7 +368,7 @@ fn spawn_update_check(_app: AppHandle) {}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     debug_log("run() called");
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -319,7 +378,12 @@ pub fn run() {
             }
         }))
         .manage(BackendProcess(Mutex::new(None)))
-        .manage(DesktopToken(Mutex::new(None)))
+        .manage(DesktopToken(Mutex::new(None)));
+
+    #[cfg(windows)]
+    let builder = builder.manage(BackendJob(Mutex::new(None)));
+
+    builder
         .on_page_load(|webview, payload| {
             if payload.event() != PageLoadEvent::Finished {
                 return;
@@ -365,6 +429,12 @@ pub fn run() {
                 debug_log(&format!("spawn_backend error: {e}"));
                 std::io::Error::new(std::io::ErrorKind::Other, e)
             })?;
+
+            #[cfg(windows)]
+            if let Some(raw) = assign_to_job(&child) {
+                *app.state::<BackendJob>().0.lock().unwrap() = Some(raw);
+            }
+
             app.state::<BackendProcess>()
                 .0
                 .lock()

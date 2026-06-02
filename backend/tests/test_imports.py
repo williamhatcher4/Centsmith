@@ -271,3 +271,54 @@ class TestDeleteImportBatch:
         assert len(rows) == 1
         assert rows[0].is_manual is True
         assert rows[0].description == "Manual entry"
+
+
+# ---------------------------------------------------------------------------
+# Charges-positive sign convention (AmEx-style single Amount column)
+# ---------------------------------------------------------------------------
+
+
+class TestChargesPositiveSignToggle:
+    AMEX_CSV = (
+        "Date,Date Processed,Description,Amount,Flexible\r\n"
+        "2025-12-20,2025-12-20,Airalo,42.09,FS\r\n"
+        "2025-12-19,2025-12-19,Uber,10.67,FS\r\n"
+        "2025-12-11,2025-12-11,PAYMENT RECEIVED - THANK YOU,-19275.99,\r\n"
+    )
+
+    def _files(self) -> dict:
+        return {"file": ("amex.csv", self.AMEX_CSV.encode(), "text/csv")}
+
+    def test_preview_auto_detects_charges_positive(self, authed_client):
+        resp = authed_client.post("/api/v1/transactions/import/preview", files=self._files())
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["amount_sign_adjustable"] is True
+        assert data["charges_positive"] is True
+        # The negative payment becomes a credit and is ignored as a card payment.
+        assert data["ignored_credits"] == 1
+        types = {row["description"]: row["transaction_type"] for row in data["rows"]}
+        assert types["Airalo"] == "debit"
+        assert types["Uber"] == "debit"
+
+    def test_confirm_stores_charges_as_debits(self, authed_client, db_session):
+        resp = authed_client.post("/api/v1/transactions/import/confirm", files=self._files())
+        assert resp.status_code == 200
+        assert resp.json()["imported"] == 2
+        stored = {t.description: t.transaction_type for t in db_session.query(Transaction).all()}
+        assert stored["Airalo"] == "debit"
+        assert stored["Uber"] == "debit"
+
+    def test_explicit_charges_negative_override_flips_signs(self, authed_client):
+        resp = authed_client.post(
+            "/api/v1/transactions/import/preview",
+            files=self._files(),
+            data={"charges_positive": "false"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["charges_positive"] is False
+        types = {row["description"]: row["transaction_type"] for row in data["rows"]}
+        # Charges-negative keeps the positive Amount as a credit.
+        assert types["Airalo"] == "credit"
+        assert types["Uber"] == "credit"
