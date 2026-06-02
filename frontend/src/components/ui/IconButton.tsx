@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { type ButtonHTMLAttributes, type ReactNode, type Ref } from 'react'
 import { cn } from '../../utils/cn'
 
 type Variant = 'ghost' | 'subtle' | 'danger'
@@ -9,6 +9,7 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: Size
   icon: ReactNode
   'aria-label': string
+  ref?: Ref<HTMLButtonElement>
 }
 
 const variants: Record<Variant, string> = {
@@ -25,10 +26,15 @@ const sizes: Record<Size, string> = {
   md: 'size-10',
 }
 
-export const IconButton = forwardRef<HTMLButtonElement, Props>(function IconButton(
-  { variant = 'ghost', size = 'md', icon, className, type = 'button', ...rest },
+export function IconButton({
+  variant = 'ghost',
+  size = 'md',
+  icon,
+  className,
+  type = 'button',
   ref,
-) {
+  ...rest
+}: Props) {
   return (
     <button
       ref={ref}
@@ -46,4 +52,4 @@ export const IconButton = forwardRef<HTMLButtonElement, Props>(function IconButt
       {icon}
     </button>
   )
-})
+}

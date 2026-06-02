@@ -1,34 +1,13 @@
-/* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertCircle, CheckCircle, Info, X } from 'lucide-react'
 import { cn } from '../../utils/cn'
-
-export interface ToastAction {
-  label: string
-  onClick: () => void
-}
+import { ToastContext, type ToastAction, type ToastContextValue } from './toast-context'
 
 interface Toast {
   id: string
   message: string
   type: 'success' | 'error' | 'info'
   action?: ToastAction
-}
-
-export interface ToastContextValue {
-  success: (message: string, opts?: { action?: ToastAction }) => void
-  error: (message: string, opts?: { action?: ToastAction }) => void
-  info: (message: string, opts?: { action?: ToastAction }) => void
-}
-
-export const ToastContext = createContext<ToastContextValue>({
-  success: () => {},
-  error: () => {},
-  info: () => {},
-})
-
-export function useToast(): ToastContextValue {
-  return useContext(ToastContext)
 }
 
 const ICONS = {
@@ -53,14 +32,14 @@ interface TimerState {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
-  const timers = useRef<Map<string, TimerState>>(new Map())
+  const timersRef = useRef(new Map<string, TimerState>())
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
-    const timer = timers.current.get(id)
+    const timer = timersRef.current.get(id)
     if (timer) {
       clearTimeout(timer.handle)
-      timers.current.delete(id)
+      timersRef.current.delete(id)
     }
   }, [])
 
@@ -69,7 +48,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID()
       setToasts((prev) => [...prev, { id, message, type, action: opts?.action }])
       const handle = setTimeout(() => dismiss(id), AUTO_DISMISS_MS)
-      timers.current.set(id, { handle, remaining: AUTO_DISMISS_MS, startedAt: Date.now() })
+      timersRef.current.set(id, { handle, remaining: AUTO_DISMISS_MS, startedAt: Date.now() })
     },
     [dismiss],
   )
@@ -78,15 +57,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onVisibility = () => {
       if (document.hidden) {
-        timers.current.forEach((timer, id) => {
+        timersRef.current.forEach((timer, id) => {
           clearTimeout(timer.handle)
           const elapsed = Date.now() - timer.startedAt
-          timers.current.set(id, { ...timer, remaining: Math.max(0, timer.remaining - elapsed) })
+          timersRef.current.set(id, { ...timer, remaining: Math.max(0, timer.remaining - elapsed) })
         })
       } else {
-        timers.current.forEach((timer, id) => {
+        timersRef.current.forEach((timer, id) => {
           const handle = setTimeout(() => dismiss(id), timer.remaining)
-          timers.current.set(id, { handle, remaining: timer.remaining, startedAt: Date.now() })
+          timersRef.current.set(id, { handle, remaining: timer.remaining, startedAt: Date.now() })
         })
       }
     }
@@ -109,9 +88,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         className="fixed bottom-20 right-4 z-[200] flex flex-col items-end gap-2 pointer-events-none sm:bottom-4"
       >
         {toasts.map((toast) => (
-          <div
+          <output
             key={toast.id}
-            role="status"
             className={cn(
               'relative flex max-w-sm items-center gap-3 overflow-hidden rounded-[var(--radius-md)] py-3 pl-4 pr-3 pointer-events-auto',
               'bg-[var(--surface-strong)] backdrop-blur-xl backdrop-saturate-150',
@@ -129,6 +107,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <span className="min-w-0 flex-1">{toast.message}</span>
             {toast.action && (
               <button
+                type="button"
                 onClick={() => {
                   toast.action!.onClick()
                   dismiss(toast.id)
@@ -139,13 +118,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               </button>
             )}
             <button
+              type="button"
               onClick={() => dismiss(toast.id)}
               aria-label="Dismiss notification"
               className="ml-1 shrink-0 text-[var(--text-subtle)] transition-colors hover:text-[var(--text)]"
             >
               <X className="size-3.5" />
             </button>
-          </div>
+          </output>
         ))}
       </div>
     </ToastContext.Provider>

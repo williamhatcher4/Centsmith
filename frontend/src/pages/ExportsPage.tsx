@@ -69,7 +69,7 @@ function ImportsSection() {
                 <th className="px-3 py-2">Filename</th>
                 <th className="px-3 py-2">Format</th>
                 <th className="px-3 py-2 text-right">Rows</th>
-                <th className="px-3 py-2"></th>
+                <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>

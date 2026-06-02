@@ -1,26 +1,7 @@
-/* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Modal } from './Modal'
 import { Button } from './Button'
-
-export interface ConfirmOptions {
-  title: string
-  message: string
-  confirmLabel?: string
-  destructive?: boolean
-}
-
-interface ConfirmContextValue {
-  confirm: (opts: ConfirmOptions) => Promise<boolean>
-}
-
-const ConfirmContext = createContext<ConfirmContextValue>({
-  confirm: () => Promise.resolve(false),
-})
-
-export function useConfirm(): (opts: ConfirmOptions) => Promise<boolean> {
-  return useContext(ConfirmContext).confirm
-}
+import { ConfirmContext, type ConfirmContextValue, type ConfirmOptions } from './confirm-context'
 
 interface DialogState extends ConfirmOptions {
   resolve: (value: boolean) => void
@@ -43,8 +24,10 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
     setState(null)
   }, [])
 
+  const value = useMemo<ConfirmContextValue>(() => ({ confirm }), [confirm])
+
   return (
-    <ConfirmContext.Provider value={{ confirm }}>
+    <ConfirmContext.Provider value={value}>
       {children}
       {state && (
         <Modal

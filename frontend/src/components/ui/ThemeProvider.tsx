@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { ThemeContext, ACCENT_IDS, type Theme, type Accent } from './theme'
+import { ThemeContext, ACCENT_IDS, type Theme, type Accent, type ThemeContextValue } from './theme'
 
 const STORAGE_KEY = 'asset-tracker:theme'
 const ACCENT_KEY = 'asset-tracker:accent'
@@ -40,8 +40,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const toggle = useCallback(() => setThemeState((t) => (t === 'light' ? 'dark' : 'light')), [])
   const setAccent = useCallback((a: Accent) => setAccentState(a), [])
 
+  const value = useMemo<ThemeContextValue>(
+    () => ({ theme, toggle, setTheme, accent, setAccent }),
+    [theme, toggle, setTheme, accent, setAccent],
+  )
+
   return (
-    <ThemeContext.Provider value={{ theme, toggle, setTheme, accent, setAccent }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   )

@@ -19,7 +19,7 @@ export function useReducedMotion(): boolean {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia(QUERY)
     const onChange = () => setReduced(mq.matches)
-    onChange()
+    // Initial value already comes from useState(getInitial); only subscribe to changes.
     if (typeof mq.addEventListener === 'function') {
       mq.addEventListener('change', onChange)
       return () => mq.removeEventListener('change', onChange)

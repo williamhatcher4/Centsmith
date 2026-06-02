@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { type ButtonHTMLAttributes, type ReactNode, type Ref } from 'react'
 import { cn } from '../../utils/cn'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'subtle'
@@ -11,6 +11,7 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   rightIcon?: ReactNode
   loading?: boolean
   fullWidth?: boolean
+  ref?: Ref<HTMLButtonElement>
 }
 
 const variants: Record<Variant, string> = {
@@ -32,22 +33,20 @@ const sizes: Record<Size, string> = {
   lg: 'h-11 px-5 text-sm gap-2',
 }
 
-export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
-  {
-    variant = 'primary',
-    size = 'md',
-    leftIcon,
-    rightIcon,
-    loading,
-    fullWidth,
-    className,
-    children,
-    disabled,
-    type = 'button',
-    ...rest
-  },
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  leftIcon,
+  rightIcon,
+  loading,
+  fullWidth,
+  className,
+  children,
+  disabled,
+  type = 'button',
   ref,
-) {
+  ...rest
+}: Props) {
   return (
     <button
       ref={ref}
@@ -76,4 +75,4 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
       {!loading && rightIcon}
     </button>
   )
-})
+}

@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, type ReactNode } from 'react'
+import { type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, type ReactNode, type Ref } from 'react'
 import { cn } from '../../utils/cn'
 
 const fieldBase =
@@ -11,12 +11,10 @@ const fieldBase =
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   invalid?: boolean
+  ref?: Ref<HTMLInputElement>
 }
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className, invalid, ...rest },
-  ref,
-) {
+export function Input({ className, invalid, ref, ...rest }: InputProps) {
   return (
     <input
       ref={ref}
@@ -24,16 +22,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {...rest}
     />
   )
-})
+}
 
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   invalid?: boolean
+  ref?: Ref<HTMLSelectElement>
 }
 
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className, invalid, children, ...rest },
-  ref,
-) {
+export function Select({ className, invalid, children, ref, ...rest }: SelectProps) {
   return (
     <div className="relative">
       <select
@@ -62,16 +58,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       </svg>
     </div>
   )
-})
+}
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   invalid?: boolean
+  ref?: Ref<HTMLTextAreaElement>
 }
 
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
-  { className, invalid, ...rest },
-  ref,
-) {
+export function Textarea({ className, invalid, ref, ...rest }: TextareaProps) {
   return (
     <textarea
       ref={ref}
@@ -84,7 +78,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       {...rest}
     />
   )
-})
+}
 
 export function Label({
   children,

@@ -8,8 +8,8 @@ import { formatMoney } from '../utils/money'
 import { cn } from '../utils/cn'
 import { ImportModal } from '../components/ImportModal'
 import { Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Select, Skeleton } from '../components/ui'
-import { useConfirm } from '../components/ui/ConfirmDialog'
-import { useToast } from '../components/ui/Toaster'
+import { useConfirm } from '../components/ui/confirm-context'
+import { useToast } from '../components/ui/toast-context'
 import { useCategories } from '../hooks/useCategories'
 
 function fmtDate(d: string) { return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
@@ -287,7 +287,7 @@ export function TransactionsPage() {
                 {showExpensed && <th className="px-5 py-3 text-center">Expensed</th>}
                 <th className="px-5 py-3">Source</th>
                 <th className="px-5 py-3 text-right">Amount</th>
-                <th className="px-3 py-3" />
+                <th className="px-3 py-3"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -322,6 +322,7 @@ export function TransactionsPage() {
                   </td>
                   <td className="px-3 py-3">
                     <button
+                      type="button"
                       aria-label={`Delete ${tx.description}`}
                       onClick={() => handleDelete(tx)}
                       disabled={deleteMutation.isPending}

@@ -26,6 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-lg font-semibold text-[var(--text)]">Something went wrong</p>
           <p className="text-sm text-[var(--text-subtle)]">An unexpected error occurred in the application.</p>
           <button
+            type="button"
             onClick={() => window.location.reload()}
             className="mt-2 px-4 py-2 text-sm font-semibold rounded-[var(--radius-sm)] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
           >

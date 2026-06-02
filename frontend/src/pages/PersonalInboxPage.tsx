@@ -153,7 +153,7 @@ export function PersonalInboxPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border-strong)] bg-[var(--surface-muted)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">
-                  <th className="w-1 px-4 py-3"><input type="checkbox" className="size-4 accent-[var(--accent)]" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={toggleAll} /></th>
+                  <th className="w-1 px-4 py-3"><input type="checkbox" aria-label="Select all transactions" className="size-4 accent-[var(--accent)]" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={toggleAll} /></th>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Description</th>
                   <th className="px-4 py-3 text-right">Amount</th>
@@ -165,7 +165,7 @@ export function PersonalInboxPage() {
                   const category = categoryById[tx.id] ?? ''
                   return (
                     <tr key={tx.id} className={cn('border-b border-[var(--border)] transition-colors duration-150 last:border-0 hover:bg-[var(--surface-muted)]', i < 16 && ROW_ANIM)} style={rowDelay(i)}>
-                      <td className="px-4 py-3"><input type="checkbox" className="size-4 accent-[var(--accent)]" checked={selectedIds.has(tx.id)} onChange={() => toggle(tx.id)} /></td>
+                      <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${tx.description}`} className="size-4 accent-[var(--accent)]" checked={selectedIds.has(tx.id)} onChange={() => toggle(tx.id)} /></td>
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--text-subtle)]">{fmtDate(tx.transaction_date)}</td>
                       <td className="px-4 py-3 font-medium">{tx.description}</td>
                       <td className={cn('whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums', tx.transaction_type === 'credit' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>{signedMoney(tx)}</td>

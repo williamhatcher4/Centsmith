@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfirmDialogProvider, useConfirm } from './ConfirmDialog'
+import { ConfirmDialogProvider } from './ConfirmDialog'
+import { useConfirm } from './confirm-context'
 
 function Trigger({ destructive = false }: { destructive?: boolean }) {
   const confirm = useConfirm()

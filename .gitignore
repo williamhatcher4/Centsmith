@@ -89,6 +89,7 @@ CLAUDE.md
 commands_to_run_tests.md
 RELEASE_NOTES.md
 RELEASE_NOTES_WEB.md
+docs/
 
 # Loose data files dropped in the repo root (statements, exports, etc.)
 /*.csv

@@ -64,7 +64,7 @@
         "https://github.com/williamhatcher4/centsmith_releases/releases/latest/download/latest.json"
       ],
       "windows": {
-        "installMode": "passive"
+        "installMode": "quiet"
       }
     }
   }

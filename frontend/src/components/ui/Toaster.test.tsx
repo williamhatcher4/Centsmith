@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ToastProvider, useToast } from './Toaster'
+import { ToastProvider } from './Toaster'
+import { useToast } from './toast-context'
 
 function ToastTrigger() {
   const toast = useToast()

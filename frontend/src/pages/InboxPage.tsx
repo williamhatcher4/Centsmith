@@ -192,7 +192,7 @@ export function InboxPage() {
               <thead>
                 <tr className="border-b border-[var(--border-strong)] bg-[var(--surface-muted)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">
                   <th className="w-1 px-4 py-3">
-                    <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={toggleAll} />
+                    <input type="checkbox" aria-label="Select all transactions" className="size-4 accent-[var(--accent)]" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={toggleAll} />
                   </th>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Description</th>
@@ -212,7 +212,7 @@ export function InboxPage() {
                     style={rowDelay(i)}
                   >
                     <td className="px-4 py-3">
-                      <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={selectedIds.has(tx.id)} onChange={() => toggle(tx.id)} />
+                      <input type="checkbox" aria-label={`Select ${tx.description}`} className="size-4 accent-[var(--accent)]" checked={selectedIds.has(tx.id)} onChange={() => toggle(tx.id)} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--text-subtle)]">{fmtDate(tx.transaction_date)}</td>
                     <td className="px-4 py-3 font-medium">{tx.description}</td>

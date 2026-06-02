@@ -44,7 +44,6 @@ export function AuroraBackground({ className }: { className?: string }) {
           style={{
             background: `radial-gradient(circle at center, ${blob.glow}, transparent 70%)`,
             animation: reduced ? undefined : blob.animation,
-            willChange: reduced ? undefined : 'transform',
           }}
         />
       ))}
