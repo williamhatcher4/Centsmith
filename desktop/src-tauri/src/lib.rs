@@ -60,6 +60,30 @@ fn dirs_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+/// The OS file-manager launcher used to reveal the data folder.
+fn file_manager_program() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "explorer"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    }
+}
+
+/// Open the Centsmith data folder in the OS file manager. Returns the path so the
+/// UI can fall back to displaying it if the launcher is unavailable.
+#[tauri::command]
+fn open_data_folder() -> Result<String, String> {
+    let dir = user_data_dir();
+    let path = dir.to_string_lossy().to_string();
+    Command::new(file_manager_program())
+        .arg(&path)
+        .spawn()
+        .map_err(|e| format!("failed to open data folder: {e}"))?;
+    Ok(path)
+}
+
 fn debug_log(msg: &str) {
     let path = user_data_dir().join("shell.log");
     let line = format!("[{}] {}\n", chrono_now(), msg);
@@ -445,6 +469,7 @@ pub fn run() {
             debug_log("setup() done, navigate thread launched");
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![open_data_folder])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -459,6 +484,24 @@ mod tests {
     use super::*;
     use std::fs::File;
     use tempfile::tempdir;
+
+    #[test]
+    fn file_manager_program_matches_platform() {
+        let program = file_manager_program();
+        if cfg!(target_os = "windows") {
+            assert_eq!(program, "explorer");
+        } else if cfg!(target_os = "macos") {
+            assert_eq!(program, "open");
+        } else {
+            assert_eq!(program, "xdg-open");
+        }
+    }
+
+    #[test]
+    fn user_data_dir_is_under_centsmith() {
+        // The resolved data dir always ends in the Centsmith app folder.
+        assert!(user_data_dir().ends_with("Centsmith"));
+    }
 
     #[test]
     fn pick_first_existing_returns_first_match() {

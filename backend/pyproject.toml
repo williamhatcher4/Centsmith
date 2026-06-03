@@ -44,6 +44,9 @@ include = ["app*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=85"
+markers = [
+    "perf: slow performance/load tests over a synthetic large-ledger fixture",
+]
 
 [tool.coverage.run]
 source = ["app"]

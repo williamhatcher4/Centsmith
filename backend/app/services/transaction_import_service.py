@@ -7,11 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.models.import_batch import ImportBatch
 from app.models.transaction import Transaction
-from app.schemas.transaction import ImportPreview, ImportPreviewRow, ImportResult
+from app.schemas.transaction import ImportPreview, ImportPreviewRow, ImportResult, SkippedRowOut
 from app.services.statement_import_service import (
+    ColumnMapping,
     ParsedRow,
     StatementParseResult,
     parse_statement_ex,
+    parse_statement_with_mapping,
 )
 
 ImportSource = Literal["card", "checking"]
@@ -43,11 +45,56 @@ def _is_card_payment(row: ParsedRow) -> bool:
     )
 
 
-def _rows_for_source(rows: list[ParsedRow], source: ImportSource) -> tuple[list[ParsedRow], int]:
-    if source == "checking":
-        return rows, 0
-    spending_rows = [row for row in rows if not _is_card_payment(row)]
-    return spending_rows, len(rows) - len(spending_rows)
+def _matches_ignore_pattern(row: ParsedRow, patterns: Optional[list[str]]) -> bool:
+    if not patterns:
+        return False
+    desc = row.description.strip().upper()
+    return any(p.strip().upper() in desc for p in patterns if p.strip())
+
+
+def _rows_for_source(
+    rows: list[ParsedRow], source: ImportSource, ignored_patterns: Optional[list[str]] = None
+) -> tuple[list[ParsedRow], int]:
+    def ignored(row: ParsedRow) -> bool:
+        if source != "checking" and _is_card_payment(row):
+            return True
+        return _matches_ignore_pattern(row, ignored_patterns)
+
+    kept = [row for row in rows if not ignored(row)]
+    return kept, len(rows) - len(kept)
+
+
+def _skipped_out(result: StatementParseResult) -> list[SkippedRowOut]:
+    return [
+        SkippedRowOut(
+            row_number=s.row_number,
+            raw_date=s.raw_date,
+            raw_amount=s.raw_amount,
+            raw_description=s.raw_description,
+            reason_code=s.reason_code,
+            message=s.message,
+        )
+        for s in result.skipped_rows
+    ]
+
+
+def _mapping_required_preview(result: StatementParseResult) -> ImportPreview:
+    info = result.columns
+    assert info is not None
+    return ImportPreview(
+        rows=[],
+        total=0,
+        duplicates=0,
+        ignored_credits=0,
+        to_import=0,
+        statement_format=result.statement_format,
+        skipped_errors=result.skipped_errors,
+        skipped_rows=_skipped_out(result),
+        mapping_required=True,
+        available_columns=info.headers,
+        sample_rows=info.sample_rows,
+        detected_columns=info.detected,
+    )
 
 
 def _existing_hashes(db: Session, rows: list[ParsedRow]) -> set[str]:
@@ -58,19 +105,34 @@ def _existing_hashes(db: Session, rows: list[ParsedRow]) -> set[str]:
 
 
 def _parse(
-    raw: bytes, filename: str, source: ImportSource, charges_positive: Optional[bool] = None
+    raw: bytes,
+    filename: str,
+    source: ImportSource,
+    charges_positive: Optional[bool] = None,
+    mapping: Optional[ColumnMapping] = None,
 ) -> StatementParseResult:
+    default_name = "checking.csv" if source == "checking" else "statement.csv"
+    if mapping is not None:
+        return parse_statement_with_mapping(filename or default_name, raw, source, mapping)
     if source == "checking":
-        return parse_statement_ex(filename or "checking.csv", raw, source="checking", charges_positive=charges_positive)
-    return parse_statement_ex(filename or "statement.csv", raw, charges_positive=charges_positive)
+        return parse_statement_ex(filename or default_name, raw, source="checking", charges_positive=charges_positive)
+    return parse_statement_ex(filename or default_name, raw, charges_positive=charges_positive)
 
 
 def preview_import(
-    db: Session, raw: bytes, filename: str, source: ImportSource, charges_positive: Optional[bool] = None
+    db: Session,
+    raw: bytes,
+    filename: str,
+    source: ImportSource,
+    charges_positive: Optional[bool] = None,
+    mapping: Optional[ColumnMapping] = None,
+    ignored_patterns: Optional[list[str]] = None,
 ) -> ImportPreview:
-    result = _parse(raw, filename, source, charges_positive)
+    result = _parse(raw, filename, source, charges_positive, mapping)
+    if result.columns is not None and result.columns.mapping_required:
+        return _mapping_required_preview(result)
     rows = result.rows
-    import_rows, ignored_credits = _rows_for_source(rows, source)
+    import_rows, ignored_credits = _rows_for_source(rows, source, ignored_patterns)
     existing = _existing_hashes(db, import_rows)
     preview_rows = [
         ImportPreviewRow(
@@ -94,17 +156,26 @@ def preview_import(
         skipped_errors=result.skipped_errors,
         amount_sign_adjustable=result.amount_sign_adjustable,
         charges_positive=result.charges_positive,
+        skipped_rows=_skipped_out(result),
     )
 
 
 def confirm_import(
-    db: Session, raw: bytes, filename: str, source: ImportSource, charges_positive: Optional[bool] = None
+    db: Session,
+    raw: bytes,
+    filename: str,
+    source: ImportSource,
+    charges_positive: Optional[bool] = None,
+    mapping: Optional[ColumnMapping] = None,
+    ignored_patterns: Optional[list[str]] = None,
 ) -> ImportResult:
-    result = _parse(raw, filename, source, charges_positive)
+    result = _parse(raw, filename, source, charges_positive, mapping)
+    if result.columns is not None and result.columns.mapping_required:
+        raise ValueError("This file needs a column mapping before it can be imported.")
     rows = result.rows
     fmt = result.statement_format
     skipped_errors = result.skipped_errors
-    import_rows, ignored_credits = _rows_for_source(rows, source)
+    import_rows, ignored_credits = _rows_for_source(rows, source, ignored_patterns)
     existing = _existing_hashes(db, import_rows)
     imported = skipped = 0
 

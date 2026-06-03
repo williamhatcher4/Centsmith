@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 from typing import Optional
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -9,8 +9,16 @@ CLASSIFICATION_VALUES = {"personal", "work"}
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    # Indexes mirror the migration (0006); kept here so metadata-built test DBs
+    # match. They cover the hot filters/sorts: date range + classification,
+    # category, expensed status, and import-batch lookups.
     __table_args__ = (
         UniqueConstraint("source_hash", name="uq_transactions_source_hash"),
+        Index("ix_transactions_transaction_date", "transaction_date"),
+        Index("ix_transactions_classification_date", "classification", "transaction_date"),
+        Index("ix_transactions_personal_category_date", "personal_category", "transaction_date"),
+        Index("ix_transactions_expensed", "classification", "expensed"),
+        Index("ix_transactions_import_batch_id", "import_batch_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

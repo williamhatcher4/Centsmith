@@ -10,7 +10,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import settings
 from app.migrations import run_migrations
 from app.routers import auth, desktop, transactions
+from app.routers import import_profiles as import_profiles_router
 from app.routers import imports as imports_router
+from app.routers import maintenance as maintenance_router
 from app.routers import settings as settings_router
 
 
@@ -40,6 +42,8 @@ app.include_router(desktop.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(imports_router.router, prefix="/api/v1")
+app.include_router(import_profiles_router.router, prefix="/api/v1")
+app.include_router(maintenance_router.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 
 

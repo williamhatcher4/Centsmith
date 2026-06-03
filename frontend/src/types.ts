@@ -23,6 +23,15 @@ export interface Transaction {
   imported_at: string
 }
 
+export interface TransactionPage {
+  items: Transaction[]
+  total: number
+  skip: number
+  limit: number
+  has_more: boolean
+  next_skip: number | null
+}
+
 export interface TransactionCreatePayload {
   transaction_date: string
   description: string
@@ -42,6 +51,15 @@ export interface ImportPreviewRow {
   is_duplicate: boolean
 }
 
+export interface SkippedRow {
+  row_number: number
+  raw_date: string
+  raw_amount: string
+  raw_description: string
+  reason_code: string
+  message: string
+}
+
 export interface ImportPreview {
   rows: ImportPreviewRow[]
   total: number
@@ -52,6 +70,49 @@ export interface ImportPreview {
   skipped_errors: number
   amount_sign_adjustable: boolean
   charges_positive: boolean
+  skipped_rows: SkippedRow[]
+  mapping_required: boolean
+  available_columns: string[]
+  sample_rows: string[][]
+  detected_columns: Record<string, number | null>
+}
+
+export type AmountConvention = 'signed' | 'charges_positive' | 'charges_negative'
+
+export interface ColumnMapping {
+  date_column: number
+  description_column: number
+  amount_column?: number | null
+  debit_column?: number | null
+  credit_column?: number | null
+  amount_convention: AmountConvention
+}
+
+export interface ImportProfile {
+  id: number
+  name: string
+  source_type: 'card' | 'checking'
+  date_column: number
+  description_column: number
+  amount_column: number | null
+  debit_column: number | null
+  credit_column: number | null
+  amount_convention: AmountConvention
+  ignored_payment_patterns: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ImportProfilePayload {
+  name: string
+  source_type: 'card' | 'checking'
+  date_column: number
+  description_column: number
+  amount_column?: number | null
+  debit_column?: number | null
+  credit_column?: number | null
+  amount_convention: AmountConvention
+  ignored_payment_patterns: string[]
 }
 
 export interface ImportResult {

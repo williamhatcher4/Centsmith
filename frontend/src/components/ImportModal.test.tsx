@@ -30,6 +30,11 @@ const PREVIEW_PAYLOAD = {
   skipped_errors: 0,
   amount_sign_adjustable: false,
   charges_positive: false,
+  skipped_rows: [],
+  mapping_required: false,
+  available_columns: [],
+  sample_rows: [],
+  detected_columns: {},
 }
 
 describe('ImportModal Phase 2 undo flow', () => {
@@ -217,5 +222,73 @@ describe('ImportModal charges-positive sign toggle', () => {
     await user.click(screen.getByRole('button', { name: /Import 1/i }))
 
     await waitFor(() => expect(confirmChargesPositive).toBe('true'))
+  })
+})
+
+describe('ImportModal column mapping fallback', () => {
+  const mappingRequiredPayload = {
+    ...PREVIEW_PAYLOAD,
+    rows: [],
+    total: 0,
+    to_import: 0,
+    statement_format: 'Generic CSV',
+    mapping_required: true,
+    available_columns: ['Col A', 'Col B', 'Col C'],
+    sample_rows: [['2026-05-01', 'Coffee', '-4.25']],
+    detected_columns: { date: null, description: null, amount: null, debit: null, credit: null },
+  }
+
+  function readColumnMapping(body: string): string | null {
+    const match = body.match(/name="column_mapping"[\r\n]+([^\r\n]+)/)
+    return match ? match[1].trim() : null
+  }
+
+  it('shows the mapping step when auto-detection fails, then previews with the chosen mapping', async () => {
+    let sentMapping: string | null = null
+    server.use(
+      http.post('/api/v1/transactions/import/preview', async ({ request }) => {
+        const mapping = readColumnMapping(await request.text())
+        if (!mapping) return HttpResponse.json(mappingRequiredPayload)
+        sentMapping = mapping
+        return HttpResponse.json({ ...PREVIEW_PAYLOAD, statement_format: 'Generic CSV' })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+
+    // Mapping step appears with the file's columns to assign.
+    await screen.findByText(/Map your columns/i)
+    expect(screen.getByLabelText('Date column')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Preview with this mapping/i }))
+
+    await screen.findByText(/To import/i)
+    await waitFor(() => expect(sentMapping).toBeTruthy())
+    expect(JSON.parse(sentMapping!)).toHaveProperty('date_column')
+  })
+
+  it('renders per-row skip reasons in the preview', async () => {
+    server.use(
+      http.post('/api/v1/transactions/import/preview', () =>
+        HttpResponse.json({
+          ...PREVIEW_PAYLOAD,
+          skipped_errors: 1,
+          skipped_rows: [
+            { row_number: 7, raw_date: 'not-a-date', raw_amount: '9.99', raw_description: 'Bad row', reason_code: 'unparseable_date', message: 'Could not read the date in this row.' },
+          ],
+        }),
+      ),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+    await screen.findByText(/To import/i)
+
+    expect(screen.getByText(/1 row skipped/i)).toBeInTheDocument()
+    expect(screen.getByText(/Could not read the date in this row/i)).toBeInTheDocument()
   })
 })

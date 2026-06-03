@@ -17,7 +17,7 @@ const BASELINE_CATEGORIES = [
 
 async function probeCategory(page: import('@playwright/test').Page): Promise<string | null> {
   const res = await page.request.get('/api/v1/transactions?classification=personal&limit=1000')
-  const rows = (await res.json()) as Array<{ description: string; personal_category: string | null }>
+  const rows = ((await res.json()) as { items: Array<{ description: string; personal_category: string | null }> }).items
   return rows.find((r) => r.description === PROBE)?.personal_category ?? null
 }
 
@@ -67,7 +67,7 @@ test('rename and relabel a custom category and the rows follow', async ({ page }
 
   // Cleanup: delete the seeded row and restore baseline categories.
   const res = await page.request.get('/api/v1/transactions?classification=personal&limit=1000')
-  const rows = (await res.json()) as Array<{ id: number; description: string }>
+  const rows = ((await res.json()) as { items: Array<{ id: number; description: string }> }).items
   const probe = rows.find((r) => r.description === PROBE)
   if (probe) await page.request.delete(`/api/v1/transactions/${probe.id}`)
   await page.request.put('/api/v1/settings', {

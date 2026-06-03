@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/server'
+import { pageOf } from '../test/handlers'
 import { renderWithProviders } from '../test/renderWithProviders'
 import { PersonalInboxPage } from './PersonalInboxPage'
 import type { Transaction } from '../types'
@@ -31,7 +32,7 @@ const personalCredit: Transaction = {
 
 describe('PersonalInboxPage', () => {
   it('shows debit-only spending categories when only debits are selected', async () => {
-    server.use(http.get('/api/v1/transactions', () => HttpResponse.json([personalDebit, personalCredit])))
+    server.use(http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([personalDebit, personalCredit]))))
     const user = userEvent.setup()
     renderWithProviders(<PersonalInboxPage />)
 
@@ -46,7 +47,7 @@ describe('PersonalInboxPage', () => {
   })
 
   it('includes Income categories when only credits are selected', async () => {
-    server.use(http.get('/api/v1/transactions', () => HttpResponse.json([personalDebit, personalCredit])))
+    server.use(http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([personalDebit, personalCredit]))))
     const user = userEvent.setup()
     renderWithProviders(<PersonalInboxPage />)
 
@@ -62,7 +63,7 @@ describe('PersonalInboxPage', () => {
   })
 
   it('restricts the bulk select to Transfer when mixing credit and debit selections', async () => {
-    server.use(http.get('/api/v1/transactions', () => HttpResponse.json([personalDebit, personalCredit])))
+    server.use(http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([personalDebit, personalCredit]))))
     const user = userEvent.setup()
     renderWithProviders(<PersonalInboxPage />)
 
@@ -79,7 +80,7 @@ describe('PersonalInboxPage', () => {
   it('submits a categorize request when a per-row category is chosen', async () => {
     const calls: unknown[] = []
     server.use(
-      http.get('/api/v1/transactions', () => HttpResponse.json([personalDebit])),
+      http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([personalDebit]))),
       http.post('/api/v1/transactions/bulk-categorize-personal', async ({ request }) => {
         calls.push(await request.json())
         return HttpResponse.json({ updated: 1 })

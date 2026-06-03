@@ -1,9 +1,34 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { Landmark, Plus, Trash2, Upload, X } from 'lucide-react'
 import { transactionsApi } from '../api/transactions'
-import type { ClassificationFilter, ExpensedFilter, Transaction, TransactionCreatePayload, TransactionType } from '../types'
+import type { ClassificationFilter, ExpensedFilter, Transaction, TransactionCreatePayload, TransactionPage, TransactionType } from '../types'
+
+const PAGE_SIZE = 200
+
+// The transaction caches hold either a single TransactionPage (inbox queries) or
+// an InfiniteData<TransactionPage> (this page's paginated list). Apply an
+// update/remove to a row across whichever shape a cache entry holds; returning
+// null from `fn` drops the row.
+type TxCache = TransactionPage | InfiniteData<TransactionPage>
+
+function patchPage(page: TransactionPage, fn: (tx: Transaction) => Transaction | null): TransactionPage {
+  const items: Transaction[] = []
+  for (const tx of page.items) {
+    const next = fn(tx)
+    if (next) items.push(next)
+  }
+  return { ...page, items }
+}
+
+function patchTxCache(current: TxCache | undefined, fn: (tx: Transaction) => Transaction | null): TxCache | undefined {
+  if (!current) return current
+  if ('pages' in current) {
+    return { ...current, pages: current.pages.map((p) => patchPage(p, fn)) }
+  }
+  return patchPage(current, fn)
+}
 import { formatMoney } from '../utils/money'
 import { cn } from '../utils/cn'
 import { ImportModal } from '../components/ImportModal'
@@ -175,15 +200,19 @@ export function TransactionsPage() {
 
   const queryKey = ['transactions', classification, activeExpensed, activePersonalCategory, startDate, endDate]
 
-  const { data: transactions = [], isLoading } = useQuery({
+  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey,
-    queryFn: () => transactionsApi.list({ classification, expensed: activeExpensed, personal_category: activePersonalCategory !== 'all' ? activePersonalCategory : undefined, start_date: startDate, end_date: endDate, limit: 1000 }),
+    queryFn: ({ pageParam }) => transactionsApi.list({ classification, expensed: activeExpensed, personal_category: activePersonalCategory !== 'all' ? activePersonalCategory : undefined, start_date: startDate, end_date: endDate, limit: PAGE_SIZE, skip: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.next_skip ?? undefined,
   })
+  const transactions = data?.pages.flatMap((p) => p.items) ?? []
+  const total = data?.pages[0]?.total ?? 0
 
   const updateExpensed = useMutation({
     mutationFn: ({ id, next }: { id: number; next: boolean }) => transactionsApi.update(id, { expensed: next }),
     onSuccess: (updated) => {
-      qc.setQueriesData<Transaction[]>({ queryKey: ['transactions'] }, (current) => current?.map((tx) => (tx.id === updated.id ? updated : tx)))
+      qc.setQueriesData<TxCache>({ queryKey: ['transactions'] }, (current) => patchTxCache(current, (tx) => (tx.id === updated.id ? updated : tx)))
       qc.invalidateQueries({ queryKey: ['transactions'] })
     },
   })
@@ -191,7 +220,7 @@ export function TransactionsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => transactionsApi.deleteTransaction(id),
     onSuccess: (deleted) => {
-      qc.setQueriesData<Transaction[]>({ queryKey: ['transactions'] }, (current) => current?.filter((tx) => tx.id !== deleted.id))
+      qc.setQueriesData<TxCache>({ queryKey: ['transactions'] }, (current) => patchTxCache(current, (tx) => (tx.id === deleted.id ? null : tx)))
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['imports'] })
       if (deleted.is_manual) {
@@ -336,6 +365,14 @@ export function TransactionsPage() {
             </tbody>
           </table>
         </div>
+        {(hasNextPage || total > transactions.length) && (
+          <div className="flex items-center justify-center gap-3 border-t border-[var(--border)] px-5 py-4">
+            <span className="text-xs text-[var(--text-subtle)]">Showing {transactions.length} of {total}</span>
+            {hasNextPage && (
+              <Button variant="secondary" onClick={() => fetchNextPage()} loading={isFetchingNextPage}>Load more</Button>
+            )}
+          </div>
+        )}
       </Card>
     )}
 

@@ -1,17 +1,22 @@
 import csv
 import io
+import json
 import re
 import uuid
 from datetime import datetime, timezone, date
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models.import_batch import ImportBatch
+from app.models.import_profile import ImportProfile
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.schemas.import_profile import ColumnMappingIn
+from app.services.statement_import_service import ColumnMapping
 from app.schemas.transaction import (
     BulkCategorizeRequest,
     BulkCategorizeResult,
@@ -27,6 +32,7 @@ from app.schemas.transaction import (
     SpendingSummary,
     TransactionCreate,
     TransactionOut,
+    TransactionPage,
     TransactionUpdate,
 )
 from app.services.transaction_import_service import (
@@ -158,7 +164,7 @@ def delete_transaction(
     return tx
 
 
-@router.get("", response_model=list[TransactionOut])
+@router.get("", response_model=TransactionPage)
 def list_transactions(
     classification: Optional[Literal["personal", "work", "unsorted"]] = Query(None),
     personal_category: Optional[str] = Query(None, max_length=80),
@@ -188,21 +194,77 @@ def list_transactions(
         q = q.filter(Transaction.transaction_date >= start_date)
     if end_date:
         q = q.filter(Transaction.transaction_date <= end_date)
+    # total over the full filtered set, before windowing — so the UI can tell the
+    # user when more rows exist instead of silently truncating at the limit.
+    total = q.count()
     if classification == "work":
         q = q.order_by(Transaction.expensed.asc())
-    return q.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).offset(skip).limit(limit).all()
+    items = q.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).offset(skip).limit(limit).all()
+    has_more = skip + len(items) < total
+    return TransactionPage(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+        has_more=has_more,
+        next_skip=(skip + limit) if has_more else None,
+    )
+
+
+def _resolve_import_mapping(
+    db: Session, column_mapping: Optional[str], profile_id: Optional[int]
+) -> tuple[Optional[ColumnMapping], Optional[list[str]]]:
+    """Resolve an explicit column mapping + ignore patterns from request fields.
+
+    A ``profile_id`` loads a saved per-bank profile; otherwise ``column_mapping``
+    is a JSON string of an ad-hoc mapping. Returns ``(None, None)`` for ordinary
+    auto-detected imports.
+    """
+    if profile_id is not None:
+        profile = db.get(ImportProfile, profile_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Import profile not found")
+        mapping = ColumnMapping(
+            date_column=profile.date_column,
+            description_column=profile.description_column,
+            amount_column=profile.amount_column,
+            debit_column=profile.debit_column,
+            credit_column=profile.credit_column,
+            amount_convention=profile.amount_convention,
+        )
+        return mapping, list(profile.ignored_payment_patterns or [])
+    if column_mapping:
+        try:
+            parsed = ColumnMappingIn(**json.loads(column_mapping))
+        except (json.JSONDecodeError, TypeError, ValidationError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid column mapping") from exc
+        mapping = ColumnMapping(
+            date_column=parsed.date_column,
+            description_column=parsed.description_column,
+            amount_column=parsed.amount_column,
+            debit_column=parsed.debit_column,
+            credit_column=parsed.credit_column,
+            amount_convention=parsed.amount_convention,
+        )
+        return mapping, None
+    return None, None
 
 
 @router.post("/import/preview", response_model=ImportPreview)
 async def preview_import(
     file: UploadFile = File(...),
     charges_positive: Optional[bool] = Form(None),
+    column_mapping: Optional[str] = Form(None),
+    profile_id: Optional[int] = Form(None),
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
+        mapping, ignored_patterns = _resolve_import_mapping(db, column_mapping, profile_id)
         raw = await read_limited_upload(file)
-        return preview_statement_import(db, raw, file.filename or "statement.csv", "card", charges_positive)
+        return preview_statement_import(
+            db, raw, file.filename or "statement.csv", "card", charges_positive, mapping, ignored_patterns
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -211,12 +273,17 @@ async def preview_import(
 async def confirm_import(
     file: UploadFile = File(...),
     charges_positive: Optional[bool] = Form(None),
+    column_mapping: Optional[str] = Form(None),
+    profile_id: Optional[int] = Form(None),
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
+        mapping, ignored_patterns = _resolve_import_mapping(db, column_mapping, profile_id)
         raw = await read_limited_upload(file)
-        return confirm_statement_import(db, raw, file.filename or "statement.csv", "card", charges_positive)
+        return confirm_statement_import(
+            db, raw, file.filename or "statement.csv", "card", charges_positive, mapping, ignored_patterns
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -224,12 +291,17 @@ async def confirm_import(
 @router.post("/import/checking/preview", response_model=ImportPreview)
 async def preview_checking_import(
     file: UploadFile = File(...),
+    column_mapping: Optional[str] = Form(None),
+    profile_id: Optional[int] = Form(None),
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
+        mapping, ignored_patterns = _resolve_import_mapping(db, column_mapping, profile_id)
         raw = await read_limited_upload(file)
-        return preview_statement_import(db, raw, file.filename or "checking.csv", "checking")
+        return preview_statement_import(
+            db, raw, file.filename or "checking.csv", "checking", None, mapping, ignored_patterns
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -237,12 +309,17 @@ async def preview_checking_import(
 @router.post("/import/checking/confirm", response_model=ImportResult)
 async def confirm_checking_import(
     file: UploadFile = File(...),
+    column_mapping: Optional[str] = Form(None),
+    profile_id: Optional[int] = Form(None),
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
+        mapping, ignored_patterns = _resolve_import_mapping(db, column_mapping, profile_id)
         raw = await read_limited_upload(file)
-        return confirm_statement_import(db, raw, file.filename or "checking.csv", "checking")
+        return confirm_statement_import(
+            db, raw, file.filename or "checking.csv", "checking", None, mapping, ignored_patterns
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -30,6 +30,15 @@ class TransactionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TransactionPage(BaseModel):
+    items: list[TransactionOut]
+    total: int
+    skip: int
+    limit: int
+    has_more: bool
+    next_skip: Optional[int] = None
+
+
 class TransactionCreate(BaseModel):
     transaction_date: date
     description: str
@@ -105,6 +114,15 @@ class ImportPreviewRow(BaseModel):
     is_duplicate: bool
 
 
+class SkippedRowOut(BaseModel):
+    row_number: int
+    raw_date: str
+    raw_amount: str
+    raw_description: str
+    reason_code: str
+    message: str
+
+
 class ImportPreview(BaseModel):
     rows: list[ImportPreviewRow]
     total: int
@@ -118,6 +136,13 @@ class ImportPreview(BaseModel):
     amount_sign_adjustable: bool = False
     # The sign convention applied to this preview (True => charges shown positive).
     charges_positive: bool = False
+    # Per-row reasons rows were skipped, so the user can see what went wrong.
+    skipped_rows: list[SkippedRowOut] = []
+    # Set when auto-detection failed and the user must map columns manually.
+    mapping_required: bool = False
+    available_columns: list[str] = []
+    sample_rows: list[list[str]] = []
+    detected_columns: dict[str, Optional[int]] = {}
 
 
 class ImportResult(BaseModel):

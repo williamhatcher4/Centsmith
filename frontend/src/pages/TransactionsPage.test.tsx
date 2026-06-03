@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/server'
-import { mockManualTransaction, mockTransactions } from '../test/handlers'
+import { mockManualTransaction, mockTransactions, pageOf } from '../test/handlers'
 import { renderWithProviders } from '../test/renderWithProviders'
 import { TransactionsPage } from './TransactionsPage'
 
@@ -15,7 +15,7 @@ describe('TransactionsPage', () => {
 
   it('hides the Expensed filter unless the work classification is active', async () => {
     server.use(
-      http.get('/api/v1/transactions', () => HttpResponse.json(mockTransactions)),
+      http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
     )
     const user = userEvent.setup()
     renderWithProviders(<TransactionsPage />)
@@ -36,7 +36,7 @@ describe('TransactionsPage', () => {
     server.use(
       http.get('/api/v1/transactions', ({ request }) => {
         calls.push(new URL(request.url).search)
-        return HttpResponse.json([])
+        return HttpResponse.json(pageOf([]))
       }),
     )
     renderWithProviders(<TransactionsPage />, { route: '/transactions?classification=work&expensed=unexpensed' })
@@ -63,7 +63,7 @@ describe('TransactionsPage', () => {
     server.use(
       http.get('/api/v1/transactions', ({ request }) => {
         calls.push(new URL(request.url).search)
-        return HttpResponse.json([])
+        return HttpResponse.json(pageOf([]))
       }),
     )
     const user = userEvent.setup()
@@ -80,6 +80,31 @@ describe('TransactionsPage', () => {
       expect(latest).toContain('end_date=2026-05-31')
     })
     expect(calls.length).toBeGreaterThan(before)
+  })
+
+  it('loads more rows when the Load more button is clicked', async () => {
+    const rowB = { ...mockTransactions[1], id: 2, description: 'Second page row' }
+    server.use(
+      http.get('/api/v1/transactions', ({ request }) => {
+        const skip = Number(new URL(request.url).searchParams.get('skip') ?? '0')
+        if (skip === 0) {
+          return HttpResponse.json({ items: [mockTransactions[0]], total: 2, skip: 0, limit: 1, has_more: true, next_skip: 1 })
+        }
+        return HttpResponse.json({ items: [rowB], total: 2, skip: 1, limit: 1, has_more: false, next_skip: null })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<TransactionsPage />)
+
+    await screen.findByText('Coffee shop')
+    expect(screen.getByText(/Showing 1 of 2/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /load more/i }))
+
+    // Both pages are now visible and the control disappears once fully loaded.
+    expect(await screen.findByText('Second page row')).toBeInTheDocument()
+    expect(screen.getByText('Coffee shop')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument()
   })
 
   // ---------------------------------------------------------------------------
@@ -143,7 +168,7 @@ describe('TransactionsPage', () => {
   describe('Delete transaction', () => {
     it('shows delete button for each transaction row', async () => {
       server.use(
-        http.get('/api/v1/transactions', () => HttpResponse.json(mockTransactions)),
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
       )
       renderWithProviders(<TransactionsPage />)
       await screen.findByText('Coffee shop')
@@ -153,7 +178,7 @@ describe('TransactionsPage', () => {
 
     it('shows confirmation dialog before deleting', async () => {
       server.use(
-        http.get('/api/v1/transactions', () => HttpResponse.json(mockTransactions)),
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
       )
       const user = userEvent.setup()
       renderWithProviders(<TransactionsPage />)
@@ -166,7 +191,7 @@ describe('TransactionsPage', () => {
     it('does not delete when cancel is clicked in the confirm dialog', async () => {
       const calls: string[] = []
       server.use(
-        http.get('/api/v1/transactions', () => HttpResponse.json(mockTransactions)),
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
         http.delete('/api/v1/transactions/:id', ({ params }) => {
           calls.push(String(params.id))
           return HttpResponse.json(mockTransactions[0])
@@ -184,7 +209,7 @@ describe('TransactionsPage', () => {
 
     it('shows Manual badge for manually-created transactions', async () => {
       server.use(
-        http.get('/api/v1/transactions', () => HttpResponse.json([mockManualTransaction])),
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([mockManualTransaction]))),
       )
       renderWithProviders(<TransactionsPage />)
       await screen.findByText('Manual entry')
@@ -193,7 +218,7 @@ describe('TransactionsPage', () => {
 
     it('invalidates import history after deleting a transaction', async () => {
       server.use(
-        http.get('/api/v1/transactions', () => HttpResponse.json(mockTransactions)),
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
         http.delete('/api/v1/transactions/:id', () => HttpResponse.json(mockTransactions[0])),
       )
       const user = userEvent.setup()
