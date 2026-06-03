@@ -16,8 +16,8 @@ type TargetTransaction = {
 async function getTargetTransaction(page: Parameters<typeof login>[0]) {
   const response = await page.request.get('/api/v1/transactions', { params: { limit: '1000' } })
   expect(response.ok()).toBeTruthy()
-  const transactions = await response.json() as Array<TargetTransaction & { description: string }>
-  return transactions.find((tx) => tx.description === TARGET) ?? null
+  const body = await response.json() as { items: Array<TargetTransaction & { description: string }> }
+  return body.items.find((tx) => tx.description === TARGET) ?? null
 }
 
 test('classifies an inbox row as personal and categorizes it', async ({ page }) => {

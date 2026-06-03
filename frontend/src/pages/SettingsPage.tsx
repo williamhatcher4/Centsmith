@@ -8,6 +8,7 @@ import { useToast } from '../components/ui/toast-context'
 import { cn } from '../utils/cn'
 import { SYSTEM_CATEGORIES } from '../hooks/useCategories'
 import { HIDEABLE_NAV_LINKS } from '../constants/nav'
+import { DataDiagnosticsCard } from '../components/DataDiagnosticsCard'
 
 const SYSTEM_SET = new Set<string>(SYSTEM_CATEGORIES)
 
@@ -468,6 +469,7 @@ export function SettingsPage() {
           </Button>
         </div>
       </Card>
+      <DataDiagnosticsCard />
       {deleteState && (
         <DeleteCategoryModal
           state={deleteState}

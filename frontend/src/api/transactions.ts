@@ -1,5 +1,20 @@
 ﻿import { api } from './client'
-import type { Classification, ClassificationFilter, DashboardSummary, ExpensedFilter, ImportPreview, ImportResult, SpendingSummary, Transaction, TransactionCreatePayload } from '../types'
+import type { Classification, ClassificationFilter, ColumnMapping, DashboardSummary, ExpensedFilter, ImportPreview, ImportResult, SpendingSummary, Transaction, TransactionCreatePayload, TransactionPage } from '../types'
+
+export interface ImportOptions {
+  chargesPositive?: boolean
+  mapping?: ColumnMapping
+  profileId?: number
+}
+
+function importFormData(file: File, options: ImportOptions = {}): FormData {
+  const body = new FormData()
+  body.append('file', file)
+  if (options.chargesPositive !== undefined) body.append('charges_positive', String(options.chargesPositive))
+  if (options.mapping) body.append('column_mapping', JSON.stringify(options.mapping))
+  if (options.profileId !== undefined) body.append('profile_id', String(options.profileId))
+  return body
+}
 
 export interface TransactionFilters {
   classification?: ClassificationFilter
@@ -8,6 +23,7 @@ export interface TransactionFilters {
   start_date?: string
   end_date?: string
   limit?: number
+  skip?: number
 }
 
 function qs(filters: TransactionFilters) {
@@ -22,7 +38,7 @@ function qs(filters: TransactionFilters) {
 }
 
 export const transactionsApi = {
-  list: (filters: TransactionFilters = {}) => api.get<Transaction[]>(`/api/v1/transactions${qs(filters)}`),
+  list: (filters: TransactionFilters = {}) => api.get<TransactionPage>(`/api/v1/transactions${qs(filters)}`),
   update: (id: number, data: Partial<Pick<Transaction, 'classification' | 'personal_category' | 'description' | 'transaction_date' | 'expensed'>>) => api.put<Transaction>(`/api/v1/transactions/${id}`, data),
   createManual: (data: TransactionCreatePayload) => api.post<Transaction>('/api/v1/transactions/manual', data),
   deleteTransaction: (id: number) => api.delete<Transaction>(`/api/v1/transactions/${id}`),
@@ -35,33 +51,23 @@ export const transactionsApi = {
   dashboard: (months = 12) => api.get<DashboardSummary>(`/api/v1/transactions/dashboard?months=${months}`),
   personalSpending: (months = 12) => api.get<SpendingSummary>(`/api/v1/transactions/spending/personal?months=${months}`),
   personalIncome: (months = 12) => api.get<SpendingSummary>(`/api/v1/transactions/income/personal?months=${months}`),
-  previewImport: async (file: File, chargesPositive?: boolean): Promise<ImportPreview> => {
-    const body = new FormData()
-    body.append('file', file)
-    if (chargesPositive !== undefined) body.append('charges_positive', String(chargesPositive))
-    const res = await fetch('/api/v1/transactions/import/preview', { method: 'POST', credentials: 'include', body })
+  previewImport: async (file: File, options: ImportOptions = {}): Promise<ImportPreview> => {
+    const res = await fetch('/api/v1/transactions/import/preview', { method: 'POST', credentials: 'include', body: importFormData(file, options) })
     if (!res.ok) throw new Error((await res.json()).detail ?? 'Preview failed')
     return res.json()
   },
-  confirmImport: async (file: File, chargesPositive?: boolean): Promise<ImportResult> => {
-    const body = new FormData()
-    body.append('file', file)
-    if (chargesPositive !== undefined) body.append('charges_positive', String(chargesPositive))
-    const res = await fetch('/api/v1/transactions/import/confirm', { method: 'POST', credentials: 'include', body })
+  confirmImport: async (file: File, options: ImportOptions = {}): Promise<ImportResult> => {
+    const res = await fetch('/api/v1/transactions/import/confirm', { method: 'POST', credentials: 'include', body: importFormData(file, options) })
     if (!res.ok) throw new Error((await res.json()).detail ?? 'Import failed')
     return res.json()
   },
-  previewCheckingImport: async (file: File): Promise<ImportPreview> => {
-    const body = new FormData()
-    body.append('file', file)
-    const res = await fetch('/api/v1/transactions/import/checking/preview', { method: 'POST', credentials: 'include', body })
+  previewCheckingImport: async (file: File, options: ImportOptions = {}): Promise<ImportPreview> => {
+    const res = await fetch('/api/v1/transactions/import/checking/preview', { method: 'POST', credentials: 'include', body: importFormData(file, options) })
     if (!res.ok) throw new Error((await res.json()).detail ?? 'Preview failed')
     return res.json()
   },
-  confirmCheckingImport: async (file: File): Promise<ImportResult> => {
-    const body = new FormData()
-    body.append('file', file)
-    const res = await fetch('/api/v1/transactions/import/checking/confirm', { method: 'POST', credentials: 'include', body })
+  confirmCheckingImport: async (file: File, options: ImportOptions = {}): Promise<ImportResult> => {
+    const res = await fetch('/api/v1/transactions/import/checking/confirm', { method: 'POST', credentials: 'include', body: importFormData(file, options) })
     if (!res.ok) throw new Error((await res.json()).detail ?? 'Import failed')
     return res.json()
   },

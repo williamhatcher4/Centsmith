@@ -183,13 +183,13 @@ def test_transaction_lists_show_debits_default_and_credits_in_unsorted(client, d
 
     response = client.get("/api/v1/transactions", params={"limit": 1000})
     assert response.status_code == 200
-    rows = response.json()
+    rows = response.json()["items"]
     assert {row["id"] for row in rows} == {debit.id, debit.id + 2}
     assert all(row["transaction_type"] == "debit" for row in rows)
 
     response = client.get("/api/v1/transactions", params={"classification": "unsorted"})
     assert response.status_code == 200
-    assert {row["id"] for row in response.json()} == {debit.id, refund.id}
+    assert {row["id"] for row in response.json()["items"]} == {debit.id, refund.id}
 
     dashboard = client.get("/api/v1/transactions/dashboard").json()
     assert dashboard["unsorted_count"] == 2
@@ -322,7 +322,7 @@ def test_inbox_query_includes_unclassified_credits(client, db_session):
 
     response = client.get("/api/v1/transactions", params={"classification": "unsorted"})
     assert response.status_code == 200
-    assert {row["id"] for row in response.json()} == {debit.id, refund.id}
+    assert {row["id"] for row in response.json()["items"]} == {debit.id, refund.id}
 
 
 def test_credit_can_be_assigned_spending_category(client, db_session):
@@ -523,7 +523,7 @@ def test_personal_list_includes_categorized_refund_credits(client, db_session):
 
     response = client.get("/api/v1/transactions", params={"classification": "personal"})
     assert response.status_code == 200
-    assert {row["id"] for row in response.json()} == {debit.id, refund.id}
+    assert {row["id"] for row in response.json()["items"]} == {debit.id, refund.id}
 
 
 def test_income_credits_do_not_offset_personal_spending(client, db_session):
@@ -642,22 +642,22 @@ def test_work_transactions_can_be_marked_and_filtered_by_expensed(client, db_ses
 
     login(client)
 
-    work_rows = client.get("/api/v1/transactions", params={"classification": "work"}).json()
+    work_rows = client.get("/api/v1/transactions", params={"classification": "work"}).json()["items"]
     assert [row["id"] for row in work_rows] == [pending.id, expensed.id]
     assert [row["expensed"] for row in work_rows] == [False, True]
 
-    filtered = client.get("/api/v1/transactions", params={"classification": "work", "expensed": False}).json()
+    filtered = client.get("/api/v1/transactions", params={"classification": "work", "expensed": False}).json()["items"]
     assert [row["id"] for row in filtered] == [pending.id]
 
     response = client.put(f"/api/v1/transactions/{pending.id}", json={"expensed": True})
     assert response.status_code == 200
     assert response.json()["expensed"] is True
 
-    refreshed = client.get("/api/v1/transactions", params={"classification": "work"}).json()
+    refreshed = client.get("/api/v1/transactions", params={"classification": "work"}).json()["items"]
     refreshed_pending = next(row for row in refreshed if row["id"] == pending.id)
     assert refreshed_pending["expensed"] is True
 
-    expensed_only = client.get("/api/v1/transactions", params={"classification": "work", "expensed": True}).json()
+    expensed_only = client.get("/api/v1/transactions", params={"classification": "work", "expensed": True}).json()["items"]
     assert {row["id"] for row in expensed_only} == {pending.id, expensed.id}
 
 
@@ -718,7 +718,7 @@ def test_personal_transactions_can_be_categorized_and_listed(client, db_session)
 
     uncategorized = client.get("/api/v1/transactions", params={"classification": "personal", "personal_category": "uncategorized"})
     assert uncategorized.status_code == 200
-    assert [row["id"] for row in uncategorized.json()] == [personal.id]
+    assert [row["id"] for row in uncategorized.json()["items"]] == [personal.id]
 
     response = client.post(
         "/api/v1/transactions/bulk-categorize-personal",
@@ -727,7 +727,7 @@ def test_personal_transactions_can_be_categorized_and_listed(client, db_session)
     assert response.status_code == 200
     assert response.json() == {"updated": 1}
 
-    refreshed = client.get("/api/v1/transactions", params={"classification": "personal"}).json()
+    refreshed = client.get("/api/v1/transactions", params={"classification": "personal"}).json()["items"]
     assert next(row for row in refreshed if row["id"] == personal.id)["personal_category"] == "Groceries"
 
 
@@ -748,7 +748,7 @@ def test_personal_category_can_be_saved_with_transaction_update(client, db_sessi
 
     uncategorized = client.get("/api/v1/transactions", params={"classification": "personal", "personal_category": "uncategorized"})
     assert uncategorized.status_code == 200
-    assert personal.id not in {row["id"] for row in uncategorized.json()}
+    assert personal.id not in {row["id"] for row in uncategorized.json()["items"]}
 
 
 def test_personal_spending_includes_category_breakdown(client, db_session):
@@ -834,7 +834,7 @@ def test_bulk_classify_marks_transactions_personal_or_work(client, db_session):
     assert response.status_code == 200
     assert response.json() == {"updated": 2}
 
-    refreshed = client.get("/api/v1/transactions", params={"classification": "personal"}).json()
+    refreshed = client.get("/api/v1/transactions", params={"classification": "personal"}).json()["items"]
     assert {row["id"] for row in refreshed} == {one.id, two.id}
 
 
@@ -1007,7 +1007,36 @@ def test_transactions_filter_by_date_range(client, db_session):
         params={"start_date": "2026-05-01", "end_date": "2026-05-31"},
     )
     assert response.status_code == 200
-    assert {row["id"] for row in response.json()} == {in_range.id}
+    assert {row["id"] for row in response.json()["items"]} == {in_range.id}
+
+
+def test_transactions_list_is_paged_and_reports_more(client, db_session):
+    for i in range(5):
+        add_transaction(
+            db_session,
+            description=f"Row {i}",
+            amount_cents=100 + i,
+            transaction_type="debit",
+            transaction_date=date(2026, 5, 1 + i),
+        )
+    login(client)
+
+    first = client.get("/api/v1/transactions", params={"limit": 2, "skip": 0}).json()
+    assert first["total"] == 5
+    assert len(first["items"]) == 2
+    assert first["has_more"] is True
+    assert first["next_skip"] == 2
+
+    last = client.get("/api/v1/transactions", params={"limit": 2, "skip": 4}).json()
+    assert len(last["items"]) == 1
+    assert last["has_more"] is False
+    assert last["next_skip"] is None
+
+    # Paging through never drops or duplicates rows.
+    seen = []
+    for skip in (0, 2, 4):
+        seen.extend(row["id"] for row in client.get("/api/v1/transactions", params={"limit": 2, "skip": skip}).json()["items"])
+    assert len(seen) == len(set(seen)) == 5
 
 
 def test_health_endpoint_responds_without_auth(client):

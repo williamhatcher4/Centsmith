@@ -34,6 +34,7 @@ export function PersonalInboxPage() {
   const { data: transactions = [], isLoading } = useQuery({
     queryKey: ['transactions', 'personal', 'uncategorized'],
     queryFn: () => transactionsApi.list({ classification: 'personal', personal_category: 'uncategorized', limit: 500 }),
+    select: (page) => page.items,
   })
 
   const filtered = useMemo(

@@ -226,7 +226,7 @@ def test_parse_statement_xls_amex_format():
     ]
 
 
-def test_parse_statement_xls_rejects_missing_header_row():
+def test_parse_statement_xls_missing_header_offers_manual_mapping():
     book = Workbook()
     sheet = book.add_sheet("Activity")
     sheet.write(0, 0, "Foo")
@@ -236,8 +236,13 @@ def test_parse_statement_xls_rejects_missing_header_row():
     buf = io.BytesIO()
     book.save(buf)
 
-    with pytest.raises(ValueError):
-        parse_statement("statement.xls", buf.getvalue())
+    # Auto-detection can't find the columns, but instead of dead-ending the parser
+    # now surfaces column metadata so the UI can offer a manual mapping step.
+    result = parse_statement_ex("statement.xls", buf.getvalue())
+    assert result.rows == []
+    assert result.columns is not None
+    assert result.columns.mapping_required is True
+    assert result.columns.headers == ["Foo", "Bar"]
 
 
 def test_parse_statement_xls_checking_signed_amount_preserves_sign():
@@ -454,10 +459,13 @@ def test_parse_statement_xlsx_checking_source_label():
     assert fmt == FORMAT_NAMES["checking"]
 
 
-def test_parse_statement_xlsx_rejects_missing_header_row():
+def test_parse_statement_xlsx_missing_header_offers_manual_mapping():
     content = _make_xlsx(["Foo", "Bar"], [["x", "y"]])
-    with pytest.raises(ValueError):
-        parse_statement("statement.xlsx", content)
+    result = parse_statement_ex("statement.xlsx", content)
+    assert result.rows == []
+    assert result.columns is not None
+    assert result.columns.mapping_required is True
+    assert result.columns.headers == ["Foo", "Bar"]
 
 
 def test_parse_statement_xlsx_rejects_malformed_workbook_as_value_error():

@@ -27,7 +27,7 @@ test('add a transaction manually and see it in the list', async ({ page }) => {
 
   // Cleanup: delete the probe row via the API so other specs are unaffected.
   const list = await page.request.get('/api/v1/transactions?limit=1000')
-  const rows = (await list.json()) as Array<{ id: number; description: string }>
+  const rows = ((await list.json()) as { items: Array<{ id: number; description: string }> }).items
   const probe = rows.find((r) => r.description === PROBE)
   if (probe) await page.request.delete(`/api/v1/transactions/${probe.id}`)
 })
