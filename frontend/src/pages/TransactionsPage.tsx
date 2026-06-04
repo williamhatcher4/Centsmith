@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
-import { Landmark, Plus, Trash2, Upload, X } from 'lucide-react'
+import { Landmark, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { transactionsApi } from '../api/transactions'
 import type { ClassificationFilter, ExpensedFilter, Transaction, TransactionCreatePayload, TransactionPage, TransactionType } from '../types'
 
@@ -172,6 +172,110 @@ function AddTransactionModal({ onClose, onSuccess }: AddTransactionModalProps) {
   )
 }
 
+interface EditTransactionForm {
+  classification: string
+  personal_category: string
+  expensed: boolean
+}
+
+interface EditTransactionModalProps {
+  tx: Transaction
+  onClose: () => void
+}
+
+function EditTransactionModal({ tx, onClose }: EditTransactionModalProps) {
+  const [form, setForm] = useState<EditTransactionForm>({
+    classification: tx.classification ?? '',
+    personal_category: tx.personal_category ?? '',
+    expensed: tx.expensed,
+  })
+  const [error, setError] = useState('')
+  const qc = useQueryClient()
+  const toast = useToast()
+  const { categoriesFor } = useCategories()
+  const modalCategoryOptions = categoriesFor({ transaction_type: tx.transaction_type })
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Partial<Pick<Transaction, 'classification' | 'personal_category' | 'expensed'>>) =>
+      transactionsApi.update(tx.id, data),
+    onSuccess: (updated) => {
+      qc.setQueriesData<TxCache>({ queryKey: ['transactions'] }, (current) => patchTxCache(current, (t) => (t.id === updated.id ? updated : t)))
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['spending'] })
+      qc.invalidateQueries({ queryKey: ['income'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast.success('Transaction updated')
+      onClose()
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    updateMutation.mutate({
+      classification: (form.classification as 'personal' | 'work') || null,
+      personal_category: form.classification === 'personal' ? (form.personal_category || null) : null,
+      expensed: form.classification === 'work' ? form.expensed : false,
+    })
+  }
+
+  const set = (key: keyof EditTransactionForm, value: string | boolean) =>
+    setForm((prev) => ({ ...prev, [key]: value }))
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Edit transaction"
+      size="md"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={updateMutation.isPending}>Cancel</Button>
+          <Button variant="primary" onClick={handleSubmit} disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+          <p className="font-medium">{tx.description}</p>
+          <p className="text-sm text-[var(--text-subtle)]">
+            {fmtDate(tx.transaction_date)} · <span className={cn('font-bold tabular-nums', tx.transaction_type === 'credit' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>{signedMoney(tx)}</span>
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Classification" htmlFor="edit-tx-class">
+            <Select id="edit-tx-class" value={form.classification} onChange={(e) => { set('classification', e.target.value); if (e.target.value !== 'personal') set('personal_category', ''); if (e.target.value !== 'work') set('expensed', false) }}>
+              <option value="">— None —</option>
+              <option value="personal">Personal</option>
+              <option value="work">Work</option>
+            </Select>
+          </Field>
+          {form.classification === 'personal' && (
+            <Field label="Category" htmlFor="edit-tx-cat">
+              <Select id="edit-tx-cat" value={form.personal_category} onChange={(e) => set('personal_category', e.target.value)}>
+                <option value="">— None —</option>
+                {modalCategoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            </Field>
+          )}
+          {form.classification === 'work' && (
+            <Field label="Expensed" htmlFor="edit-tx-expensed">
+              <div className="flex items-center gap-2 pt-1">
+                <input id="edit-tx-expensed" type="checkbox" className="size-4 accent-[var(--accent)]" checked={form.expensed} onChange={(e) => set('expensed', e.target.checked)} />
+                <label htmlFor="edit-tx-expensed" className="text-sm text-[var(--text-subtle)]">Mark as expensed</label>
+              </div>
+            </Field>
+          )}
+        </div>
+        {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+      </form>
+    </Modal>
+  )
+}
+
 function readClassificationParam(value: string | null): ClassificationFilter {
   return value === 'personal' || value === 'work' || value === 'unsorted' ? value : 'all'
 }
@@ -184,6 +288,7 @@ export function TransactionsPage() {
   const initialAction = searchParams.get('action')
   const [importMode, setImportMode] = useState<'card' | 'checking' | null>(initialAction === 'import' ? 'card' : null)
   const [showAddModal, setShowAddModal] = useState(initialAction === 'add')
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [classification, setClassification] = useState<ClassificationFilter>(() => readClassificationParam(searchParams.get('classification')))
   const [expensed, setExpensed] = useState<ExpensedFilter>(() => readExpensedParam(searchParams.get('expensed')))
   const [personalCategory, setPersonalCategory] = useState(() => searchParams.get('personal_category') || 'all')
@@ -350,15 +455,25 @@ export function TransactionsPage() {
                     {signedMoney(tx)}
                   </td>
                   <td className="px-3 py-3">
-                    <button
-                      type="button"
-                      aria-label={`Delete ${tx.description}`}
-                      onClick={() => handleDelete(tx)}
-                      disabled={deleteMutation.isPending}
-                      className="text-[var(--text-subtle)] hover:text-[var(--danger)] transition-colors disabled:opacity-40"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        aria-label={`Edit ${tx.description}`}
+                        onClick={() => setEditingTx(tx)}
+                        className="text-[var(--text-subtle)] hover:text-[var(--accent)] transition-colors"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${tx.description}`}
+                        onClick={() => handleDelete(tx)}
+                        disabled={deleteMutation.isPending}
+                        className="text-[var(--text-subtle)] hover:text-[var(--danger)] transition-colors disabled:opacity-40"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -377,6 +492,7 @@ export function TransactionsPage() {
     )}
 
     {showAddModal && <AddTransactionModal onClose={() => setShowAddModal(false)} onSuccess={() => qc.invalidateQueries({ queryKey: ['transactions'] })} />}
+    {editingTx && <EditTransactionModal tx={editingTx} onClose={() => setEditingTx(null)} />}
     {importMode && <ImportModal mode={importMode} onClose={() => setImportMode(null)} />}
   </div>
 }

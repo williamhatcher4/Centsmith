@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../test/server'
@@ -233,6 +233,62 @@ describe('TransactionsPage', () => {
       await waitFor(() => {
         expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['imports'] })
       })
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Edit transaction (classification + category)
+  // ---------------------------------------------------------------------------
+
+  describe('Edit transaction', () => {
+    it('shows an edit button for each transaction row', async () => {
+      server.use(
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
+      )
+      renderWithProviders(<TransactionsPage />)
+      await screen.findByText('Coffee shop')
+      expect(screen.getAllByRole('button', { name: /edit/i })).toHaveLength(mockTransactions.length)
+    })
+
+    it('opens a pre-filled edit modal and reveals the category select for personal rows', async () => {
+      server.use(
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<TransactionsPage />)
+      await screen.findByText('Coffee shop')
+
+      await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+      const dialog = await screen.findByRole('dialog')
+      // The row being edited is summarized; classification starts unset, so no category yet.
+      expect(within(dialog).getByText('Coffee shop')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Category')).not.toBeInTheDocument()
+
+      await user.selectOptions(screen.getByLabelText('Classification'), 'personal')
+      expect(await screen.findByLabelText('Category')).toBeInTheDocument()
+    })
+
+    it('saves classification + category via PUT and closes the modal', async () => {
+      let body: Record<string, unknown> | null = null
+      server.use(
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
+        http.put('/api/v1/transactions/:id', async ({ request }) => {
+          body = (await request.json()) as Record<string, unknown>
+          return HttpResponse.json({ ...mockTransactions[0], classification: 'personal', personal_category: 'Dining' })
+        }),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<TransactionsPage />)
+      await screen.findByText('Coffee shop')
+
+      await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+      await screen.findByRole('dialog')
+      await user.selectOptions(screen.getByLabelText('Classification'), 'personal')
+      await user.selectOptions(await screen.findByLabelText('Category'), 'Dining')
+      await user.click(screen.getByRole('button', { name: /save/i }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(body).toEqual({ classification: 'personal', personal_category: 'Dining', expensed: false })
     })
   })
 })
