@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::net::TcpStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
@@ -24,6 +24,7 @@ struct BackendJob(Mutex<Option<usize>>);
 const BACKEND_DIR_NAME: &str = "backend";
 const BACKEND_EXE_NAME: &str = "centsmith-backend.exe";
 const RUNTIME_FILE_NAME: &str = "runtime.json";
+const LICENSE_FILE_NAME: &str = "license.token";
 const BOOTSTRAP_PATH: &str = "/desktop-bootstrap";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -82,6 +83,86 @@ fn open_data_folder() -> Result<String, String> {
         .spawn()
         .map_err(|e| format!("failed to open data folder: {e}"))?;
     Ok(path)
+}
+
+/// Status of the locally stored update license token. Never carries the full
+/// token back to the UI — only whether one exists and a masked tail for display.
+#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+struct LicenseStatus {
+    present: bool,
+    hint: Option<String>,
+}
+
+fn license_token_path(dir: &Path) -> PathBuf {
+    dir.join(LICENSE_FILE_NAME)
+}
+
+/// Read the stored license token, returning `None` when the file is absent or
+/// blank. The token is the gate the updater attaches as a bearer header.
+fn read_license_token_from(dir: &Path) -> Option<String> {
+    let contents = fs::read_to_string(license_token_path(dir)).ok()?;
+    let trimmed = contents.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// Persist a license token. A blank/whitespace-only value clears it instead, so
+/// the UI can treat "save empty" the same as "remove".
+fn write_license_token_to(dir: &Path, token: &str) -> std::io::Result<()> {
+    let trimmed = token.trim();
+    let path = license_token_path(dir);
+    if trimmed.is_empty() {
+        return clear_license_token_from(dir);
+    }
+    fs::write(path, trimmed)
+}
+
+fn clear_license_token_from(dir: &Path) -> std::io::Result<()> {
+    match fs::remove_file(license_token_path(dir)) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+/// Mask a token to its last four characters (e.g. `…AB12`) so the Settings UI
+/// can confirm which license is active without revealing it.
+fn mask_token(token: &str) -> String {
+    let trimmed = token.trim();
+    let tail: String = trimmed.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
+    format!("…{tail}")
+}
+
+fn license_status_from(dir: &Path) -> LicenseStatus {
+    match read_license_token_from(dir) {
+        Some(token) => LicenseStatus { present: true, hint: Some(mask_token(&token)) },
+        None => LicenseStatus { present: false, hint: None },
+    }
+}
+
+/// Report whether an update license is stored, with a masked hint for display.
+#[tauri::command]
+fn get_license_status() -> LicenseStatus {
+    license_status_from(&user_data_dir())
+}
+
+/// Store (or, when blank, clear) the update license token pasted in Settings.
+#[tauri::command]
+fn set_license_token(token: String) -> Result<LicenseStatus, String> {
+    let dir = user_data_dir();
+    write_license_token_to(&dir, &token).map_err(|e| format!("failed to save license: {e}"))?;
+    Ok(license_status_from(&dir))
+}
+
+/// Remove the stored update license token.
+#[tauri::command]
+fn clear_license_token() -> Result<LicenseStatus, String> {
+    let dir = user_data_dir();
+    clear_license_token_from(&dir).map_err(|e| format!("failed to clear license: {e}"))?;
+    Ok(license_status_from(&dir))
 }
 
 fn debug_log(msg: &str) {
@@ -314,8 +395,22 @@ fn stop_backend(app: &AppHandle) {
 
 #[cfg(not(debug_assertions))]
 async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
+    // Updates are gated by the paid license: the token is attached as a bearer
+    // header so the Worker can authorize the feed + installer download. With no
+    // license stored we skip the check entirely — the app still runs fully.
+    let Some(token) = read_license_token_from(&user_data_dir()) else {
+        debug_log("no license token stored; skipping update check");
+        return Ok(());
+    };
+
     debug_log("checking for updates");
-    let Some(update) = app.updater()?.check().await? else {
+    let update = app
+        .updater_builder()
+        .header("Authorization", format!("Bearer {token}"))?
+        .build()?
+        .check()
+        .await?;
+    let Some(update) = update else {
         debug_log("no update available");
         return Ok(());
     };
@@ -469,7 +564,12 @@ pub fn run() {
             debug_log("setup() done, navigate thread launched");
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_data_folder])
+        .invoke_handler(tauri::generate_handler![
+            open_data_folder,
+            get_license_status,
+            set_license_token,
+            clear_license_token
+        ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -570,6 +670,57 @@ mod tests {
         assert!(!is_bootstrap_path("/desktop-bootstrap/extra"));
         assert!(!is_bootstrap_path("/"));
         assert!(!is_bootstrap_path("/Desktop-Bootstrap"));
+    }
+
+    #[test]
+    fn license_token_round_trips_and_trims() {
+        let dir = tempdir().unwrap();
+        assert_eq!(read_license_token_from(dir.path()), None);
+        write_license_token_to(dir.path(), "  tok-ABCD1234  ").unwrap();
+        assert_eq!(
+            read_license_token_from(dir.path()),
+            Some("tok-ABCD1234".to_string())
+        );
+    }
+
+    #[test]
+    fn writing_blank_token_clears_existing() {
+        let dir = tempdir().unwrap();
+        write_license_token_to(dir.path(), "real-token").unwrap();
+        assert!(license_token_path(dir.path()).is_file());
+        write_license_token_to(dir.path(), "   ").unwrap();
+        assert_eq!(read_license_token_from(dir.path()), None);
+        assert!(!license_token_path(dir.path()).exists());
+    }
+
+    #[test]
+    fn clear_license_token_is_idempotent() {
+        let dir = tempdir().unwrap();
+        // Removing a non-existent token is a no-op success.
+        clear_license_token_from(dir.path()).unwrap();
+        write_license_token_to(dir.path(), "real-token").unwrap();
+        clear_license_token_from(dir.path()).unwrap();
+        assert_eq!(read_license_token_from(dir.path()), None);
+    }
+
+    #[test]
+    fn license_status_masks_to_last_four_chars() {
+        let dir = tempdir().unwrap();
+        assert_eq!(
+            license_status_from(dir.path()),
+            LicenseStatus { present: false, hint: None }
+        );
+        write_license_token_to(dir.path(), "abcdef-WXYZ").unwrap();
+        assert_eq!(
+            license_status_from(dir.path()),
+            LicenseStatus { present: true, hint: Some("…WXYZ".to_string()) }
+        );
+    }
+
+    #[test]
+    fn mask_token_handles_short_tokens() {
+        assert_eq!(mask_token("ab"), "…ab");
+        assert_eq!(mask_token(""), "…");
     }
 
     #[test]

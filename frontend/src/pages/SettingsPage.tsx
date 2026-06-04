@@ -9,6 +9,8 @@ import { cn } from '../utils/cn'
 import { SYSTEM_CATEGORIES } from '../hooks/useCategories'
 import { HIDEABLE_NAV_LINKS } from '../constants/nav'
 import { DataDiagnosticsCard } from '../components/DataDiagnosticsCard'
+import { LicenseUpdatesCard } from '../components/LicenseUpdatesCard'
+import { licenseApi } from '../api/license'
 
 const SYSTEM_SET = new Set<string>(SYSTEM_CATEGORIES)
 
@@ -469,6 +471,7 @@ export function SettingsPage() {
           </Button>
         </div>
       </Card>
+      {licenseApi.isDesktop() && <LicenseUpdatesCard />}
       <DataDiagnosticsCard />
       {deleteState && (
         <DeleteCategoryModal

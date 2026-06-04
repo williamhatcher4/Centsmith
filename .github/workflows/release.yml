@@ -18,6 +18,9 @@ env:
   RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
   R2_BUCKET: centsmith-installers
   R2_PREFIX: installers
+  # Base URL of the license-gated update Worker (in the Centsmith_website repo).
+  # The app's updater endpoint in tauri.conf.json must match this base + /latest.json.
+  UPDATER_BASE_URL: https://centsmith.ca/api/updates
 
 jobs:
   ci-gate:
@@ -174,12 +177,36 @@ jobs:
           $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $latestPath -Encoding utf8
           $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $releasePath -Encoding utf8
 
-          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/$objectKey", "--file=$($installer.FullName)", "--content-type", "application/vnd.microsoft.portable-executable")
-          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/latest.json", "--file=$latestPath", "--content-type", "application/json")
-          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/releases/$tag.json", "--file=$releasePath", "--content-type", "application/json")
+          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/$objectKey", "--file=$($installer.FullName)", "--content-type", "application/vnd.microsoft.portable-executable", "--remote")
+          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/latest.json", "--file=$latestPath", "--content-type", "application/json", "--remote")
+          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/releases/$tag.json", "--file=$releasePath", "--content-type", "application/json", "--remote")
+
+          # --- Tauri updater manifest (the app's auto-update feed; served by the
+          # license-gated Worker). Distinct from latest.json, which feeds the
+          # website download page. The `url` points back at the Worker's gated
+          # download route, so the installer fetch is authorized too.
+          $sigPath = "$($installer.FullName).sig"
+          if (-not (Test-Path -LiteralPath $sigPath)) {
+            throw "Updater signature not found at $sigPath. Ensure createUpdaterArtifacts is enabled and TAURI_SIGNING_PRIVATE_KEY is set."
+          }
+          $signature = (Get-Content -Raw -LiteralPath $sigPath).Trim()
+          $version = $tag.TrimStart('v')
+          $updaterPath = Join-Path $env:RUNNER_TEMP "centsmith-updater.json"
+          $updater = [ordered]@{
+            version = $version
+            pub_date = $publishedAt
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{
+                signature = $signature
+                url = "$($env:UPDATER_BASE_URL)/download/$($installer.Name)"
+              }
+            }
+          }
+          $updater | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $updaterPath -Encoding utf8
+          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/updater.json", "--file=$updaterPath", "--content-type", "application/json", "--remote")
 
           $releases = @()
-          & npx --yes wrangler@latest r2 object get "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/releases.json" "--file=$existingReleasesPath"
+          & npx --yes wrangler@latest r2 object get "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/releases.json" "--file=$existingReleasesPath" "--remote"
           if ($LASTEXITCODE -eq 0 -and (Test-Path $existingReleasesPath)) {
             $existing = Get-Content -Raw -LiteralPath $existingReleasesPath | ConvertFrom-Json
             if ($existing -is [array]) {
@@ -192,7 +219,7 @@ jobs:
           $releases = @($metadata) + @($releases | Where-Object { $_.release_tag -ne $tag })
           $trimmedReleases = @($releases | Select-Object -First 20)
           ConvertTo-Json -InputObject $trimmedReleases -Depth 8 -AsArray | Set-Content -LiteralPath $mergedReleasesPath -Encoding utf8
-          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/releases.json", "--file=$mergedReleasesPath", "--content-type", "application/json")
+          Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/releases.json", "--file=$mergedReleasesPath", "--content-type", "application/json", "--remote")
 
       - name: Installer smoke test (install, launch, health probe, uninstall)
         shell: pwsh
