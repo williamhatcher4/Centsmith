@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, Upload } from 'lucide-react'
 import { importsApi } from '../api/imports'
 import { importProfilesApi } from '../api/importProfiles'
+import { cardsApi } from '../api/cards'
 import { transactionsApi } from '../api/transactions'
 import type { ColumnMapping, ImportPreview, ImportResult } from '../types'
 import { cn } from '../utils/cn'
@@ -142,11 +143,17 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
   const [appliedDraft, setAppliedDraft] = useState<MappingDraft | null>(null)
   const [profileId, setProfileId] = useState<number | undefined>(undefined)
   const [profileName, setProfileName] = useState('')
+  const [cardId, setCardId] = useState<number | undefined>(undefined)
 
   const isChecking = mode === 'checking'
   const { data: profiles = [] } = useQuery({
     queryKey: ['import-profiles'],
     queryFn: () => importProfilesApi.list(),
+    enabled: !isChecking,
+  })
+  const { data: cards = [] } = useQuery({
+    queryKey: ['cards'],
+    queryFn: () => cardsApi.list(),
     enabled: !isChecking,
   })
   const availableProfiles = profiles.filter((p) => p.source_type === mode)
@@ -264,7 +271,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
       }
       const next = isChecking
         ? await transactionsApi.confirmCheckingImport(file, confirmOpts)
-        : await transactionsApi.confirmImport(file, { chargesPositive, ...confirmOpts })
+        : await transactionsApi.confirmImport(file, { chargesPositive, ...(cardId !== undefined ? { cardId } : {}), ...confirmOpts })
       setResult(next)
       invalidateImportQueries()
       if (next.imported > 0 && next.batch_id) {
@@ -317,6 +324,14 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
       {step === 'upload' && (
         <div>
           <p className="mb-5 text-sm leading-relaxed text-[var(--text-muted)]">{uploadCopy}</p>
+          {!isChecking && cards.length > 0 && (
+            <Field label="Assign to card (optional)" htmlFor="import-card-select" className="mb-4">
+              <Select id="import-card-select" value={cardId !== undefined ? String(cardId) : ''} onChange={(e) => setCardId(e.target.value ? Number(e.target.value) : undefined)}>
+                <option value="">No card</option>
+                {cards.map((c) => <option key={c.id} value={String(c.id)}>{c.name}{c.last4 ? ` ····${c.last4}` : ''}</option>)}
+              </Select>
+            </Field>
+          )}
           {!isChecking && availableProfiles.length > 0 && (
             <Field label="Use a saved import profile" htmlFor="profile-select" className="mb-4">
               <Select id="profile-select" value={profileId !== undefined ? String(profileId) : ''} onChange={(e) => selectProfile(e.target.value)}>
@@ -364,7 +379,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
           )}
           <div className="max-h-[420px] overflow-auto rounded-[8px] border border-[var(--border)]">
             <table className="w-full text-sm"><thead className="sticky top-0 bg-[var(--surface-solid)]"><tr className="border-b border-[var(--border)] text-left text-[11px] uppercase text-[var(--text-subtle)]"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Description</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2">Status</th></tr></thead><tbody>
-              {preview.rows.map((row) => { const repeat = repeatInfo.get(row.row_number); return <tr key={row.row_number} className={cn('border-b border-[var(--border)] last:border-0', row.is_duplicate && 'opacity-50')}><td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-subtle)]">{row.date}</td><td className="max-w-[260px] truncate px-3 py-2 font-medium">{row.description}</td><td className={cn('whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums', row.transaction_type === 'credit' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>{signedMoney(row.amount_cents, row.transaction_type)}</td><td className="px-3 py-2"><div className="flex flex-wrap items-center gap-1.5">{row.is_duplicate ? <Badge tone="muted">duplicate</Badge> : <Badge tone="success">new</Badge>}{repeat && <Badge tone="muted">repeat in file ({repeat.index} of {repeat.size})</Badge>}</div></td></tr> })}
+              {preview.rows.map((row) => { const repeat = repeatInfo.get(row.row_number); return <tr key={row.row_number} className={cn('border-b border-[var(--border)] last:border-0', (row.is_duplicate || row.is_ignored_credit) && 'opacity-50')}><td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--text-subtle)]">{row.date}</td><td className="max-w-[260px] truncate px-3 py-2 font-medium">{row.description}</td><td className={cn('whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums', row.transaction_type === 'credit' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>{signedMoney(row.amount_cents, row.transaction_type)}</td><td className="px-3 py-2"><div className="flex flex-wrap items-center gap-1.5">{row.is_ignored_credit ? <Badge tone="warning">credit ignored</Badge> : row.is_duplicate ? <Badge tone="muted">duplicate</Badge> : <Badge tone="success">new</Badge>}{repeat && <Badge tone="muted">repeat in file ({repeat.index} of {repeat.size})</Badge>}</div></td></tr> })}
             </tbody></table>
           </div>
           <SkippedRowsDetails preview={preview} />

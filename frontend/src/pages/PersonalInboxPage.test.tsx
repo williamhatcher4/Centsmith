@@ -19,6 +19,7 @@ const personalDebit: Transaction = {
   expensed: false,
   is_manual: false,
   statement_format: 'test',
+  card_id: null,
   imported_at: '2026-05-01T12:00:00Z',
 }
 

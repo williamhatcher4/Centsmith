@@ -176,7 +176,7 @@ class TestUpdateSettings:
         assert resp.status_code == 422
 
     def test_hiding_all_pages_rejected(self, authed_client):
-        all_pages = ["/", "/inbox", "/personal-inbox", "/transactions", "/spending", "/exports"]
+        all_pages = ["/", "/inbox", "/personal-inbox", "/transactions", "/spending", "/exports", "/statements"]
         resp = authed_client.put(
             "/api/v1/settings",
             json={"personal_categories": list(DEFAULT_CATEGORIES), "hidden_pages": all_pages},

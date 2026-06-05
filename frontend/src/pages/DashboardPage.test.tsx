@@ -72,6 +72,36 @@ describe('DashboardPage', () => {
     expect(screen.getByText('STARBUCKS')).toBeInTheDocument()
   })
 
+  it('excludes reimbursements from income and net cash flow', async () => {
+    server.use(
+      http.get('/api/v1/transactions/dashboard', () =>
+        HttpResponse.json({
+          personal_total_cents: 50000,
+          work_total_cents: 12500,
+          unsorted_count: 0,
+          latest_month: '2026-05',
+          months: [
+            { month: '2026-05', personal_cents: 50000, work_cents: 12500, income_cents: 200000, reimbursement_cents: 30000 },
+          ],
+          income_total_cents: 200000,
+          reimbursement_total_cents: 30000,
+          uncategorized_income_cents: 0,
+          uncategorized_income_count: 0,
+          unexpensed_work_cents: 0,
+          unexpensed_work_count: 0,
+          top_merchants: [],
+        }),
+      ),
+    )
+    renderWithProviders(<DashboardPage />)
+
+    // Income card shows only true income ($2,000.00), not income + reimbursement ($2,300.00).
+    expect(await screen.findByText('$2,000.00')).toBeInTheDocument()
+    expect(screen.queryByText('$2,300.00')).not.toBeInTheDocument()
+    // Net cash flow = income 200000 - personal 50000 = 150000 ($1,500.00), reimbursement excluded.
+    expect(screen.getByText('$1,500.00')).toBeInTheDocument()
+  })
+
   it('shows month-over-month spending change', async () => {
     renderWithProviders(<DashboardPage />)
     // months: 04 = 30000 -> 05 = 20000, a 33% decrease

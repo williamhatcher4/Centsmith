@@ -14,6 +14,7 @@ import { PersonalInboxPage } from './pages/PersonalInboxPage'
 import { TransactionsPage } from './pages/TransactionsPage'
 import { SpendingPage } from './pages/SpendingPage'
 import { ExportsPage } from './pages/ExportsPage'
+import { StatementsPage } from './pages/StatementsPage'
 import { SettingsPage } from './pages/SettingsPage'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } })
@@ -46,6 +47,7 @@ export default function App() {
                       <Route path="transactions" element={<TransactionsPage />} />
                       <Route path="spending" element={<SpendingPage />} />
                       <Route path="exports" element={<ExportsPage />} />
+                      <Route path="statements" element={<StatementsPage />} />
                       <Route path="settings" element={<SettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />

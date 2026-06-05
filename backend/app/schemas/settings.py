@@ -4,7 +4,7 @@ from pydantic import BaseModel, field_validator
 from app.models.user_settings import SYSTEM_CATEGORIES
 
 ALL_PAGE_SLUGS: frozenset[str] = frozenset(
-    {"/", "/inbox", "/personal-inbox", "/transactions", "/spending", "/exports"}
+    {"/", "/inbox", "/personal-inbox", "/transactions", "/spending", "/exports", "/statements"}
 )
 
 

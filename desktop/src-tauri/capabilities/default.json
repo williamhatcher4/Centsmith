@@ -3,6 +3,9 @@
   "identifier": "default",
   "description": "Capabilities the main Centsmith window needs.",
   "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*", "http://127.0.0.1:*/*"]
+  },
   "permissions": [
     "core:default",
     "core:window:allow-show",

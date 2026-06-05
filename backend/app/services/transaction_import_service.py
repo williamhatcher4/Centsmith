@@ -54,14 +54,17 @@ def _matches_ignore_pattern(row: ParsedRow, patterns: Optional[list[str]]) -> bo
 
 def _rows_for_source(
     rows: list[ParsedRow], source: ImportSource, ignored_patterns: Optional[list[str]] = None
-) -> tuple[list[ParsedRow], int]:
+) -> tuple[list[ParsedRow], list[ParsedRow]]:
     def ignored(row: ParsedRow) -> bool:
         if source != "checking" and _is_card_payment(row):
             return True
         return _matches_ignore_pattern(row, ignored_patterns)
 
-    kept = [row for row in rows if not ignored(row)]
-    return kept, len(rows) - len(kept)
+    kept: list[ParsedRow] = []
+    ignored_rows: list[ParsedRow] = []
+    for row in rows:
+        (ignored_rows if ignored(row) else kept).append(row)
+    return kept, ignored_rows
 
 
 def _skipped_out(result: StatementParseResult) -> list[SkippedRowOut]:
@@ -132,7 +135,7 @@ def preview_import(
     if result.columns is not None and result.columns.mapping_required:
         return _mapping_required_preview(result)
     rows = result.rows
-    import_rows, ignored_credits = _rows_for_source(rows, source, ignored_patterns)
+    import_rows, ignored_rows = _rows_for_source(rows, source, ignored_patterns)
     existing = _existing_hashes(db, import_rows)
     preview_rows = [
         ImportPreviewRow(
@@ -145,12 +148,25 @@ def preview_import(
         )
         for row in import_rows
     ]
+    ignored_preview_rows = [
+        ImportPreviewRow(
+            row_number=row.row_number,
+            date=row.transaction_date,
+            description=row.description,
+            amount_cents=row.amount_cents,
+            transaction_type=row.transaction_type,
+            is_duplicate=False,
+            is_ignored_credit=True,
+        )
+        for row in ignored_rows
+    ]
     duplicates = sum(1 for row in preview_rows if row.is_duplicate)
+    all_rows = sorted(preview_rows + ignored_preview_rows, key=lambda r: r.row_number)
     return ImportPreview(
-        rows=preview_rows,
+        rows=all_rows,
         total=len(rows),
         duplicates=duplicates,
-        ignored_credits=ignored_credits,
+        ignored_credits=len(ignored_rows),
         to_import=len(preview_rows) - duplicates,
         statement_format=result.statement_format,
         skipped_errors=result.skipped_errors,
@@ -168,6 +184,7 @@ def confirm_import(
     charges_positive: Optional[bool] = None,
     mapping: Optional[ColumnMapping] = None,
     ignored_patterns: Optional[list[str]] = None,
+    card_id: Optional[int] = None,
 ) -> ImportResult:
     result = _parse(raw, filename, source, charges_positive, mapping)
     if result.columns is not None and result.columns.mapping_required:
@@ -175,7 +192,8 @@ def confirm_import(
     rows = result.rows
     fmt = result.statement_format
     skipped_errors = result.skipped_errors
-    import_rows, ignored_credits = _rows_for_source(rows, source, ignored_patterns)
+    import_rows, ignored_rows = _rows_for_source(rows, source, ignored_patterns)
+    ignored_credits = len(ignored_rows)
     existing = _existing_hashes(db, import_rows)
     imported = skipped = 0
 
@@ -205,6 +223,7 @@ def confirm_import(
             statement_format=fmt,
             source_hash=row.source_hash,
             import_batch_id=batch_id,
+            card_id=card_id,
         ))
         existing.add(row.source_hash)
         imported += 1

@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent};
+use tauri_plugin_dialog::DialogExt;
 #[cfg(not(debug_assertions))]
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::{MessageDialogButtons, MessageDialogKind};
 #[cfg(not(debug_assertions))]
 use tauri_plugin_updater::UpdaterExt;
 
@@ -83,6 +84,25 @@ fn open_data_folder() -> Result<String, String> {
         .spawn()
         .map_err(|e| format!("failed to open data folder: {e}"))?;
     Ok(path)
+}
+
+/// Save bytes the UI already fetched (e.g. a database backup) to a user-chosen
+/// path. WebView2 ignores programmatic `<a download>` clicks, so the desktop
+/// build routes downloads through this native save dialog instead. Returns
+/// `false` when the user cancels the dialog so the UI can stay silent.
+#[tauri::command]
+fn save_download(app: AppHandle, filename: String, bytes: Vec<u8>) -> Result<bool, String> {
+    let Some(file) = app
+        .dialog()
+        .file()
+        .set_file_name(&filename)
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+    let path = file.into_path().map_err(|e| format!("invalid save path: {e}"))?;
+    fs::write(&path, &bytes).map_err(|e| format!("failed to write file: {e}"))?;
+    Ok(true)
 }
 
 /// Status of the locally stored update license token. Never carries the full
@@ -566,6 +586,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_data_folder,
+            save_download,
             get_license_status,
             set_license_token,
             clear_license_token

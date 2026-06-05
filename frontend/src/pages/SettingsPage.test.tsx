@@ -214,7 +214,7 @@ describe('SettingsPage Pages section', () => {
     await screen.findByText('Groceries')
 
     // Hide everything except Dashboard. Then Dashboard should be locked.
-    for (const label of ['Inbox', 'Personal Inbox', 'Transactions', 'Spending', 'Exports']) {
+    for (const label of ['Inbox', 'Personal Inbox', 'Transactions', 'Spending', 'Exports', 'Statements']) {
       await user.click(screen.getByRole('checkbox', { name: `Show ${label}` }))
     }
     const dashboardBox = screen.getByRole('checkbox', { name: 'Show Dashboard' })

@@ -2,6 +2,7 @@ import io
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -12,8 +13,16 @@ from app.services.maintenance_service import (
     backup_database,
     build_support_bundle,
     database_path,
+    list_disk_backups,
     restore_database,
+    restore_from_disk,
+    reveal_in_file_manager,
+    write_backup_to_disk,
 )
+
+
+class RestoreFromDiskRequest(BaseModel):
+    name: str
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 
@@ -42,6 +51,20 @@ def data_location(
     return {"path": str(database_path(_engine(db)).parent)}
 
 
+@router.post("/open-data-folder")
+def open_data_folder(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Reveal the data folder in the OS file manager (backend runs locally).
+
+    Returns ``opened`` so the UI can fall back to displaying ``path`` if the
+    launcher is unavailable (e.g. a headless environment).
+    """
+    folder = database_path(_engine(db)).parent
+    return {"opened": reveal_in_file_manager(folder), "path": str(folder)}
+
+
 @router.get("/backup")
 def download_backup(
     _: User = Depends(get_current_user),
@@ -57,6 +80,45 @@ def download_backup(
         media_type="application/x-sqlite3",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.post("/backup-to-disk")
+def backup_to_disk(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Write a backup file locally and return its path (desktop save fallback)."""
+    try:
+        dest = write_backup_to_disk(_engine(db))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"path": str(dest)}
+
+
+@router.get("/backups")
+def list_backups(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Backups saved on disk (newest first) for one-click in-app restore."""
+    return {"backups": list_disk_backups(_engine(db))}
+
+
+@router.post("/restore-from-disk")
+def restore_backup_from_disk(
+    payload: RestoreFromDiskRequest,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    engine = _engine(db)
+    # Release this request's connection before the engine is disposed and the
+    # underlying file is swapped (mirrors the upload-based restore).
+    db.close()
+    try:
+        restore_from_disk(engine, payload.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "restored", "message": "Data restored. Reload the app to see your restored data."}
 
 
 @router.post("/restore")

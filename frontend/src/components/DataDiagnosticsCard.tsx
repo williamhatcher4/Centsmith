@@ -1,10 +1,18 @@
 import { useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { Download, FolderOpen, LifeBuoy, Upload } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Download, FolderOpen, Upload } from 'lucide-react'
 import { maintenanceApi } from '../api/maintenance'
 import { Button, Card, CardHeader } from './ui'
 import { useConfirm } from './ui/confirm-context'
 import { useToast } from './ui/toast-context'
+
+/** Compact human-readable file size (B / KB / MB). */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  return `${(kb / 1024).toFixed(1)} MB`
+}
 
 export function DataDiagnosticsCard() {
   const qc = useQueryClient()
@@ -12,6 +20,11 @@ export function DataDiagnosticsCard() {
   const confirm = useConfirm()
   const restoreRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string | null>(null)
+
+  const { data: backups = [] } = useQuery({
+    queryKey: ['maintenance', 'backups'],
+    queryFn: maintenanceApi.listBackups,
+  })
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(label)
@@ -26,15 +39,15 @@ export function DataDiagnosticsCard() {
 
   function backup() {
     run('backup', async () => {
-      await maintenanceApi.downloadBackup()
-      toast.success('Backup downloaded.')
-    })
-  }
-
-  function supportBundle() {
-    run('support', async () => {
-      await maintenanceApi.downloadSupportBundle()
-      toast.success('Support bundle downloaded. It excludes your transactions and any secrets.')
+      const { path } = await maintenanceApi.downloadBackup()
+      if (path) {
+        await qc.invalidateQueries({ queryKey: ['maintenance', 'backups'] })
+        toast.success(`Backup saved to ${path}`, {
+          action: { label: 'Open folder', onClick: () => void maintenanceApi.openDataFolder() },
+        })
+      } else {
+        toast.success('Backup downloaded.')
+      }
     })
   }
 
@@ -45,16 +58,12 @@ export function DataDiagnosticsCard() {
     })
   }
 
-  async function onRestoreFile(file: File) {
-    const ok = await confirm({
-      title: 'Restore from backup',
-      message: 'This replaces ALL current data with the contents of the backup file. This cannot be undone. Continue?',
-      confirmLabel: 'Restore',
-      destructive: true,
-    })
+  /** Shared destructive-restore flow: confirm, run, invalidate, offer reload. */
+  async function confirmAndRestore(label: string, message: string, doRestore: () => Promise<{ message?: string }>) {
+    const ok = await confirm({ title: 'Restore from backup', message, confirmLabel: 'Restore', destructive: true })
     if (!ok) return
-    await run('restore', async () => {
-      const result = await maintenanceApi.restore(file)
+    await run(label, async () => {
+      const result = await doRestore()
       await qc.invalidateQueries()
       toast.success(result.message ?? 'Data restored.', {
         action: { label: 'Reload now', onClick: () => window.location.reload() },
@@ -62,29 +71,66 @@ export function DataDiagnosticsCard() {
     })
   }
 
+  function onRestoreFile(file: File) {
+    return confirmAndRestore(
+      'restore',
+      'This replaces ALL current data with the contents of the backup file. This cannot be undone. Continue?',
+      () => maintenanceApi.restore(file),
+    )
+  }
+
+  function restoreFromDisk(name: string) {
+    return confirmAndRestore(
+      `restore:${name}`,
+      `This replaces ALL current data with "${name}". This cannot be undone. Continue?`,
+      () => maintenanceApi.restoreFromDisk(name),
+    )
+  }
+
   return (
     <Card padding="md" className="mb-6">
       <CardHeader
         title="Data & diagnostics"
-        subtitle="Back up or restore your local database, or share a diagnostics bundle with support."
+        subtitle="Back up or restore your local database."
       />
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" leftIcon={<Download className="size-4" />} onClick={backup} loading={busy === 'backup'}>
           Back up data
         </Button>
         <Button variant="secondary" leftIcon={<Upload className="size-4" />} onClick={() => restoreRef.current?.click()} loading={busy === 'restore'}>
-          Restore from backup
+          Restore from a file
         </Button>
         <Button variant="secondary" leftIcon={<FolderOpen className="size-4" />} onClick={openFolder} loading={busy === 'folder'}>
           Open data folder
         </Button>
-        <Button variant="secondary" leftIcon={<LifeBuoy className="size-4" />} onClick={supportBundle} loading={busy === 'support'}>
-          Download support bundle
-        </Button>
       </div>
-      <p className="mt-3 text-xs text-[var(--text-subtle)]">
-        The support bundle includes app version, OS, and recent logs. It never includes your transactions, passwords, or tokens.
-      </p>
+
+      {backups.length > 0 && (
+        <div className="mt-4">
+          <h3 className="mb-2 text-sm font-medium text-[var(--text)]">Restore from a local backup</h3>
+          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-md border border-[var(--border)]">
+            {backups.map((b) => (
+              <li key={b.name} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-[var(--text)]">{b.name}</p>
+                  <p className="text-xs text-[var(--text-subtle)]">
+                    {formatBytes(b.size_bytes)} · {new Date(b.modified).toLocaleString()}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => restoreFromDisk(b.name)}
+                  loading={busy === `restore:${b.name}`}
+                >
+                  Restore
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <input
         ref={restoreRef}
         type="file"

@@ -4,6 +4,7 @@ import io
 import sqlite3
 import zipfile
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -86,10 +87,104 @@ def test_data_location_returns_db_folder(env):
     assert resp.json()["path"] == str(env.db_path.parent)
 
 
+def test_open_data_folder_invokes_launcher(env, monkeypatch):
+    # Don't actually pop an Explorer window during the test; assert the backend
+    # targets the DB folder and reports whether the launcher succeeded.
+    revealed = {}
+
+    def fake_reveal(path):
+        revealed["path"] = path
+        return True
+
+    monkeypatch.setattr("app.routers.maintenance.reveal_in_file_manager", fake_reveal)
+    resp = env.client.post("/api/v1/maintenance/open-data-folder")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"opened": True, "path": str(env.db_path.parent)}
+    assert str(revealed["path"]) == str(env.db_path.parent)
+
+
+def test_open_data_folder_reports_failure(env, monkeypatch):
+    monkeypatch.setattr("app.routers.maintenance.reveal_in_file_manager", lambda _p: False)
+    resp = env.client.post("/api/v1/maintenance/open-data-folder")
+    assert resp.status_code == 200
+    assert resp.json() == {"opened": False, "path": str(env.db_path.parent)}
+
+
+def test_open_data_folder_requires_auth(env):
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+    assert client.post("/api/v1/maintenance/open-data-folder").status_code == 401
+
+
 def test_backup_is_valid_sqlite(env):
     resp = env.client.get("/api/v1/maintenance/backup")
     assert resp.status_code == 200
     assert resp.content.startswith(b"SQLite format 3\x00")
+
+
+def test_backup_to_disk_writes_file_in_backups_folder(env):
+    resp = env.client.post("/api/v1/maintenance/backup-to-disk")
+    assert resp.status_code == 200
+    dest = Path(resp.json()["path"])
+    assert dest.exists()
+    assert dest.parent == env.db_path.parent / "backups"
+    assert dest.read_bytes().startswith(b"SQLite format 3\x00")
+
+
+def test_backup_to_disk_requires_auth(env):
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+    assert client.post("/api/v1/maintenance/backup-to-disk").status_code == 401
+
+
+def test_list_backups_is_empty_then_lists_written_backup(env):
+    assert env.client.get("/api/v1/maintenance/backups").json() == {"backups": []}
+
+    written = Path(env.client.post("/api/v1/maintenance/backup-to-disk").json()["path"])
+    listed = env.client.get("/api/v1/maintenance/backups").json()["backups"]
+    assert [b["name"] for b in listed] == [written.name]
+    assert listed[0]["size_bytes"] > 0
+    assert "modified" in listed[0]
+
+
+def test_restore_from_disk_round_trip(env):
+    # Snapshot to the backups folder (only ORIGINAL MERCHANT / A1 present).
+    name = Path(env.client.post("/api/v1/maintenance/backup-to-disk").json()["path"]).name
+
+    # Mutate the live DB, then restore the on-disk backup by name.
+    db = env.Session()
+    _add_tx(db, "LATER MERCHANT", "B2")
+    db.close()
+
+    resp = env.client.post("/api/v1/maintenance/restore-from-disk", json={"name": name})
+    assert resp.status_code == 200
+
+    check = env.Session()
+    hashes = {h for (h,) in check.query(Transaction.source_hash).all()}
+    check.close()
+    assert hashes == {"A1"}
+
+
+def test_restore_from_disk_rejects_path_traversal(env):
+    resp = env.client.post(
+        "/api/v1/maintenance/restore-from-disk",
+        json={"name": "../centsmith.db"},
+    )
+    assert resp.status_code == 400
+    # The live data is untouched after a rejected restore.
+    check = env.Session()
+    hashes = {h for (h,) in check.query(Transaction.source_hash).all()}
+    check.close()
+    assert hashes == {"A1"}
+
+
+def test_restore_from_disk_rejects_missing_file(env):
+    resp = env.client.post(
+        "/api/v1/maintenance/restore-from-disk",
+        json={"name": "does-not-exist.db"},
+    )
+    assert resp.status_code == 400
 
 
 def test_backup_then_restore_round_trip(env):

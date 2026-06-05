@@ -25,6 +25,7 @@ class TransactionOut(BaseModel):
     expensed: bool
     is_manual: bool
     statement_format: Optional[str]
+    card_id: Optional[int]
     imported_at: datetime
 
     model_config = {"from_attributes": True}
@@ -55,6 +56,26 @@ class TransactionUpdate(BaseModel):
     description: Optional[str] = None
     transaction_date: Optional[date] = None
     expensed: Optional[bool] = None
+    card_id: Optional[int] = None
+
+
+class BulkAssignCardRequest(BaseModel):
+    transaction_ids: list[int]
+    card_id: Optional[int] = None
+
+    @field_validator("transaction_ids")
+    @classmethod
+    def validate_ids(cls, value: list[int]) -> list[int]:
+        ids = sorted(set(value))
+        if not ids:
+            raise ValueError("transaction_ids cannot be empty")
+        if len(ids) > 500:
+            raise ValueError("cannot update more than 500 transactions at once")
+        return ids
+
+
+class BulkAssignCardResult(BaseModel):
+    updated: int
 
 
 class BulkClassifyRequest(BaseModel):
@@ -112,6 +133,9 @@ class ImportPreviewRow(BaseModel):
     amount_cents: int
     transaction_type: TransactionType
     is_duplicate: bool
+    # True for credit rows that are filtered out of the import (card payments or
+    # user ignore patterns); shown in the preview so the user can see what's excluded.
+    is_ignored_credit: bool = False
 
 
 class SkippedRowOut(BaseModel):

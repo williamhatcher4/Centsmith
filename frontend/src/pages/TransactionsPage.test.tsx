@@ -288,7 +288,7 @@ describe('TransactionsPage', () => {
       await user.click(screen.getByRole('button', { name: /save/i }))
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-      expect(body).toEqual({ classification: 'personal', personal_category: 'Dining', expensed: false })
+      expect(body).toEqual({ classification: 'personal', personal_category: 'Dining', expensed: false, card_id: null })
     })
   })
 })

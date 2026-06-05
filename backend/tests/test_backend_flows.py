@@ -208,7 +208,12 @@ def test_import_preview_and_confirm_ignore_card_payment_credits(client, db_sessi
     assert preview.json()["total"] == 2
     assert preview.json()["ignored_credits"] == 1
     assert preview.json()["to_import"] == 1
-    assert [row["transaction_type"] for row in preview.json()["rows"]] == ["debit"]
+    # The ignored card-payment credit is still surfaced in the preview (flagged) so
+    # the user can see what's being excluded.
+    assert [(row["transaction_type"], row["is_ignored_credit"]) for row in preview.json()["rows"]] == [
+        ("debit", False),
+        ("credit", True),
+    ]
 
     confirm = client.post("/api/v1/transactions/import/confirm", files=statement_file([
         ["2026-05-01", "Coffee", "4.25", ""],
@@ -893,7 +898,7 @@ def test_bulk_classify_rejects_empty_payload(client):
     assert response.status_code == 422
 
 
-def test_personal_income_aggregates_credits_in_income_categories(client, db_session):
+def test_personal_income_excludes_reimbursements_from_income(client, db_session):
     add_transaction(
         db_session,
         description="Paycheck",
@@ -927,9 +932,10 @@ def test_personal_income_aggregates_credits_in_income_categories(client, db_sess
     response = client.get("/api/v1/transactions/income/personal", params={"months": 12})
     assert response.status_code == 200
     body = response.json()
-    assert body["total_cents"] == 205000
+    # Reimbursements (5000c) are excluded; only the 200000c Income credit counts.
+    assert body["total_cents"] == 200000
     category_names = {row["category_name"] for row in body["by_category"]}
-    assert category_names == {"Income", "Reimbursement"}
+    assert category_names == {"Income"}
 
 
 def test_personal_income_excludes_debits(client, db_session):

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
-import { Landmark, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
+import { CreditCard, Landmark, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { cardsApi } from '../api/cards'
 import { transactionsApi } from '../api/transactions'
 import type { ClassificationFilter, ExpensedFilter, Transaction, TransactionCreatePayload, TransactionPage, TransactionType } from '../types'
 
@@ -176,6 +177,7 @@ interface EditTransactionForm {
   classification: string
   personal_category: string
   expensed: boolean
+  card_id: string
 }
 
 interface EditTransactionModalProps {
@@ -188,15 +190,17 @@ function EditTransactionModal({ tx, onClose }: EditTransactionModalProps) {
     classification: tx.classification ?? '',
     personal_category: tx.personal_category ?? '',
     expensed: tx.expensed,
+    card_id: tx.card_id != null ? String(tx.card_id) : '',
   })
   const [error, setError] = useState('')
   const qc = useQueryClient()
   const toast = useToast()
   const { categoriesFor } = useCategories()
+  const { data: cards = [] } = useQuery({ queryKey: ['cards'], queryFn: () => cardsApi.list() })
   const modalCategoryOptions = categoriesFor({ transaction_type: tx.transaction_type })
 
   const updateMutation = useMutation({
-    mutationFn: (data: Partial<Pick<Transaction, 'classification' | 'personal_category' | 'expensed'>>) =>
+    mutationFn: (data: Partial<Pick<Transaction, 'classification' | 'personal_category' | 'expensed' | 'card_id'>>) =>
       transactionsApi.update(tx.id, data),
     onSuccess: (updated) => {
       qc.setQueriesData<TxCache>({ queryKey: ['transactions'] }, (current) => patchTxCache(current, (t) => (t.id === updated.id ? updated : t)))
@@ -204,6 +208,7 @@ function EditTransactionModal({ tx, onClose }: EditTransactionModalProps) {
       qc.invalidateQueries({ queryKey: ['spending'] })
       qc.invalidateQueries({ queryKey: ['income'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: ['statement'] })
       toast.success('Transaction updated')
       onClose()
     },
@@ -217,6 +222,7 @@ function EditTransactionModal({ tx, onClose }: EditTransactionModalProps) {
       classification: (form.classification as 'personal' | 'work') || null,
       personal_category: form.classification === 'personal' ? (form.personal_category || null) : null,
       expensed: form.classification === 'work' ? form.expensed : false,
+      card_id: form.card_id ? Number(form.card_id) : null,
     })
   }
 
@@ -269,6 +275,14 @@ function EditTransactionModal({ tx, onClose }: EditTransactionModalProps) {
               </div>
             </Field>
           )}
+          {cards.length > 0 && (
+            <Field label="Card" htmlFor="edit-tx-card">
+              <Select id="edit-tx-card" value={form.card_id} onChange={(e) => set('card_id', e.target.value)}>
+                <option value="">— None —</option>
+                {cards.map((c) => <option key={c.id} value={String(c.id)}>{c.name}{c.last4 ? ` ····${c.last4}` : ''}</option>)}
+              </Select>
+            </Field>
+          )}
         </div>
         {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
       </form>
@@ -294,10 +308,13 @@ export function TransactionsPage() {
   const [personalCategory, setPersonalCategory] = useState(() => searchParams.get('personal_category') || 'all')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [assignCardId, setAssignCardId] = useState('')
   const qc = useQueryClient()
   const confirm = useConfirm()
   const toast = useToast()
   const { all: allCategories } = useCategories()
+  const { data: cards = [] } = useQuery({ queryKey: ['cards'], queryFn: () => cardsApi.list() })
   const showExpensed = classification === 'work'
   const activeExpensed = showExpensed ? expensed : 'all'
   const showPersonalCategory = classification === 'personal'
@@ -353,6 +370,18 @@ export function TransactionsPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const bulkAssignCard = useMutation({
+    mutationFn: ({ ids, cardId }: { ids: number[]; cardId: number | null }) => transactionsApi.bulkAssignCard(ids, cardId),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['statement'] })
+      setSelectedIds(new Set())
+      setAssignCardId('')
+      toast.success(`Updated ${res.updated} transaction${res.updated === 1 ? '' : 's'}`)
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   async function handleDelete(tx: Transaction) {
     const ok = await confirm({
       title: 'Delete transaction',
@@ -361,6 +390,29 @@ export function TransactionsPage() {
       destructive: true,
     })
     if (ok) deleteMutation.mutate(tx.id)
+  }
+
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allPageSelected = transactions.length > 0 && transactions.every((tx) => selectedIds.has(tx.id))
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      if (transactions.every((tx) => prev.has(tx.id))) {
+        const next = new Set(prev)
+        transactions.forEach((tx) => next.delete(tx.id))
+        return next
+      }
+      const next = new Set(prev)
+      transactions.forEach((tx) => next.add(tx.id))
+      return next
+    })
   }
 
   const hasFilter = classification !== 'all' || activeExpensed !== 'all' || activePersonalCategory !== 'all' || startDate || endDate
@@ -396,6 +448,26 @@ export function TransactionsPage() {
       </div>
     </Card>
 
+    {selectedIds.size > 0 && (
+      <Card variant="solid" padding="sm" className="mb-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-[var(--text)]">{selectedIds.size} selected</span>
+          <CreditCard className="size-4 text-[var(--text-subtle)]" aria-hidden />
+          <Select aria-label="Assign selected to card" value={assignCardId} onChange={(e) => setAssignCardId(e.target.value)} className="max-w-[220px]">
+            <option value="">No card (unassign)</option>
+            {cards.map((c) => <option key={c.id} value={String(c.id)}>{c.name}{c.last4 ? ` ····${c.last4}` : ''}</option>)}
+          </Select>
+          <Button
+            onClick={() => bulkAssignCard.mutate({ ids: Array.from(selectedIds), cardId: assignCardId ? Number(assignCardId) : null })}
+            loading={bulkAssignCard.isPending}
+          >
+            Assign to card
+          </Button>
+          <Button variant="ghost" leftIcon={<X className="size-4" />} onClick={() => setSelectedIds(new Set())}>Clear selection</Button>
+        </div>
+      </Card>
+    )}
+
     {isLoading ? (
       <Skeleton className="h-64" />
     ) : transactions.length === 0 ? (
@@ -415,6 +487,9 @@ export function TransactionsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border-strong)] bg-[var(--surface-muted)] text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">
+                <th className="px-5 py-3">
+                  <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={allPageSelected} onChange={toggleSelectAll} aria-label="Select all transactions" />
+                </th>
                 <th className="px-5 py-3">Date</th>
                 <th className="px-5 py-3">Description</th>
                 <th className="px-5 py-3">Sort</th>
@@ -426,7 +501,10 @@ export function TransactionsPage() {
             </thead>
             <tbody>
               {transactions.map((tx, i) => (
-                <tr key={tx.id} className={cn('border-b border-[var(--border)] transition-colors duration-150 last:border-0 hover:bg-[var(--surface-muted)]', i < 16 && ROW_ANIM)} style={rowDelay(i)}>
+                <tr key={tx.id} className={cn('border-b border-[var(--border)] transition-colors duration-150 last:border-0 hover:bg-[var(--surface-muted)]', selectedIds.has(tx.id) && 'bg-[var(--accent-soft)]', i < 16 && ROW_ANIM)} style={rowDelay(i)}>
+                  <td className="px-5 py-3">
+                    <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={selectedIds.has(tx.id)} onChange={() => toggleSelected(tx.id)} aria-label={`Select ${tx.description}`} />
+                  </td>
                   <td className="whitespace-nowrap px-5 py-3 text-xs text-[var(--text-subtle)]">{fmtDate(tx.transaction_date)}</td>
                   <td className="px-5 py-3 font-medium">{tx.description}</td>
                   <td className="px-5 py-3">

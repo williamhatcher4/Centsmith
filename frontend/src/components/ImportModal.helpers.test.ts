@@ -20,6 +20,7 @@ function row(overrides: Partial<ImportPreviewRow> & { row_number: number }): Imp
     amount_cents: overrides.amount_cents ?? 425,
     transaction_type: overrides.transaction_type ?? 'debit',
     is_duplicate: overrides.is_duplicate ?? false,
+    is_ignored_credit: overrides.is_ignored_credit ?? false,
   }
 }
 

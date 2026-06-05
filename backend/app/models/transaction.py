@@ -19,6 +19,7 @@ class Transaction(Base):
         Index("ix_transactions_personal_category_date", "personal_category", "transaction_date"),
         Index("ix_transactions_expensed", "classification", "expensed"),
         Index("ix_transactions_import_batch_id", "import_batch_id"),
+        Index("ix_transactions_card_id", "card_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -34,6 +35,9 @@ class Transaction(Base):
     source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     import_batch_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("import_batches.id", ondelete="SET NULL"), nullable=True
+    )
+    card_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("cards.id", ondelete="SET NULL"), nullable=True
     )
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

@@ -20,7 +20,32 @@ export interface Transaction {
   expensed: boolean
   is_manual: boolean
   statement_format: string | null
+  card_id: number | null
   imported_at: string
+}
+
+export interface Card {
+  id: number
+  name: string
+  last4: string | null
+  statement_day: number | null
+}
+
+export interface CardPayload {
+  name: string
+  last4?: string | null
+  statement_day?: number | null
+}
+
+export interface StatementSummary {
+  card_id: number
+  start_date: string
+  end_date: string
+  charges_cents: number
+  payments_cents: number
+  net_cents: number
+  charge_count: number
+  payment_count: number
 }
 
 export interface TransactionPage {
@@ -49,6 +74,7 @@ export interface ImportPreviewRow {
   amount_cents: number
   transaction_type: TransactionType
   is_duplicate: boolean
+  is_ignored_credit: boolean
 }
 
 export interface SkippedRow {
@@ -136,6 +162,12 @@ export interface ImportBatchDeleteResult {
   removed_rows: number
   classified_rows: number
   categorized_rows: number
+}
+
+export interface LocalBackup {
+  name: string
+  size_bytes: number
+  modified: string
 }
 
 export interface SpendingSummary {

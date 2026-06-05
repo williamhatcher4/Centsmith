@@ -35,10 +35,10 @@ export function DashboardPage() {
       month: m.month,
       Personal: m.personal_cents / 100,
       Work: m.work_cents / 100,
-      Income: (m.income_cents + m.reimbursement_cents) / 100,
+      Income: m.income_cents / 100,
     })) ?? []
 
-  const incomeCents = data ? data.income_total_cents + data.reimbursement_total_cents : 0
+  const incomeCents = data ? data.income_total_cents : 0
   const inboxCount = data ? data.unsorted_count + data.uncategorized_income_count : 0
   const netCents = data ? incomeCents - data.personal_total_cents : 0
   const savingsRate = incomeCents > 0 ? (netCents / incomeCents) * 100 : null

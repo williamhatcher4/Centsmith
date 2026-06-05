@@ -12,6 +12,7 @@ import os
 import platform
 import re
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -56,6 +57,88 @@ def database_path(engine: Engine) -> Path:
     if not db or db == ":memory:":
         raise ValueError("Backups require a file-based SQLite database")
     return Path(db)
+
+
+def reveal_in_file_manager(path: Path) -> bool:
+    """Open a folder in the OS file manager from the local backend process.
+
+    The desktop shell and the backend run on the same machine in the same user
+    session, so the backend can reveal the data folder directly — this avoids
+    relying on the Tauri webview's remote-origin IPC, which is unreliable for the
+    backend-served page. Returns False (rather than raising) when the launcher is
+    unavailable so the caller can fall back to just displaying the path.
+    """
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(path))  # type: ignore[attr-defined]  # noqa: S606  (Windows-only)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+        return True
+    except Exception:
+        return False
+
+
+def backups_dir(engine: Engine) -> Path:
+    """The ``backups/`` folder beside the database where on-disk backups live."""
+    return database_path(engine).parent / "backups"
+
+
+def write_backup_to_disk(engine: Engine) -> Path:
+    """Write a backup file into a ``backups/`` folder beside the database.
+
+    The desktop shell can't reliably save a download (WebView2 ignores
+    `<a download>` blob clicks and the webview's remote-origin IPC is
+    unreliable), so the local backend writes the file itself and returns the
+    path for the UI to display. Returns the full path to the created file.
+    """
+    folder = backups_dir(engine)
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    dest = folder / f"centsmith-backup-{stamp}.db"
+    dest.write_bytes(backup_database(engine))
+    return dest
+
+
+def list_disk_backups(engine: Engine) -> list[dict]:
+    """List ``.db`` backups in the backups folder, newest first.
+
+    Each entry carries ``name`` (filename only), ``size_bytes`` and an ISO
+    ``modified`` timestamp so the UI can offer one-click restore without the
+    user navigating the filesystem.
+    """
+    folder = backups_dir(engine)
+    if not folder.is_dir():
+        return []
+    entries = []
+    for path in folder.glob("*.db"):
+        if not path.is_file():
+            continue
+        stat = path.stat()
+        entries.append(
+            {
+                "name": path.name,
+                "size_bytes": stat.st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            }
+        )
+    entries.sort(key=lambda e: e["modified"], reverse=True)
+    return entries
+
+
+def restore_from_disk(engine: Engine, name: str) -> None:
+    """Restore a backup that already lives in the backups folder, by filename.
+
+    ``name`` must be a bare filename within the backups folder — any path
+    traversal or missing file raises ValueError so a request can never read
+    outside that directory.
+    """
+    folder = backups_dir(engine)
+    candidate = (folder / name).resolve()
+    if candidate.parent != folder.resolve() or not candidate.is_file():
+        raise ValueError("That backup file was not found.")
+    restore_database(engine, candidate.read_bytes())
 
 
 def backup_database(engine: Engine) -> bytes:

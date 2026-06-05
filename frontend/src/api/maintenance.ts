@@ -1,3 +1,5 @@
+import type { LocalBackup } from '../types'
+
 interface TauriGlobal {
   core?: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> }
 }
@@ -13,8 +15,13 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   return (body && typeof body.detail === 'string' && body.detail) || fallback
 }
 
-/** Trigger a browser download of a blob from a maintenance endpoint. */
-async function downloadFrom(path: string, fallback: string): Promise<void> {
+/** True inside the desktop shell (Tauri injects this global on every page). */
+function isDesktop(): boolean {
+  return !!window.__TAURI__
+}
+
+/** Browser download via a synthetic `<a download>` (used in the web build). */
+async function browserDownload(path: string, fallback: string): Promise<void> {
   const res = await fetch(path, { credentials: 'include' })
   if (!res.ok) throw new Error(await errorMessage(res, fallback))
   const disposition = res.headers.get('Content-Disposition') ?? ''
@@ -32,8 +39,21 @@ async function downloadFrom(path: string, fallback: string): Promise<void> {
 }
 
 export const maintenanceApi = {
-  downloadBackup: () => downloadFrom('/api/v1/maintenance/backup', 'Backup failed'),
-  downloadSupportBundle: () => downloadFrom('/api/v1/maintenance/support-bundle', 'Could not build support bundle'),
+  /**
+   * Back up the database. In the desktop shell, WebView2 ignores `<a download>`
+   * blob clicks and the webview's remote-origin Tauri IPC is unreliable, so the
+   * local backend writes the file next to the database and returns its path. In
+   * the browser, do a normal download. `path` is set only for the desktop case.
+   */
+  downloadBackup: async (): Promise<{ path?: string }> => {
+    if (isDesktop()) {
+      const res = await fetch('/api/v1/maintenance/backup-to-disk', { method: 'POST', credentials: 'include' })
+      if (!res.ok) throw new Error(await errorMessage(res, 'Backup failed'))
+      return { path: (await res.json()).path as string }
+    }
+    await browserDownload('/api/v1/maintenance/backup', 'Backup failed')
+    return {}
+  },
   restore: async (file: File): Promise<{ message: string }> => {
     const body = new FormData()
     body.append('file', file)
@@ -41,22 +61,33 @@ export const maintenanceApi = {
     if (!res.ok) throw new Error(await errorMessage(res, 'Restore failed'))
     return res.json()
   },
-  dataLocation: async (): Promise<string> => {
-    const res = await fetch('/api/v1/maintenance/data-location', { credentials: 'include' })
-    if (!res.ok) throw new Error(await errorMessage(res, 'Could not resolve the data folder'))
-    return (await res.json()).path
+  /** Backups saved on disk (newest first), for one-click in-app restore. */
+  listBackups: async (): Promise<LocalBackup[]> => {
+    const res = await fetch('/api/v1/maintenance/backups', { credentials: 'include' })
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not list backups'))
+    return (await res.json()).backups as LocalBackup[]
+  },
+  /** Restore one of the on-disk backups by filename (no upload needed). */
+  restoreFromDisk: async (name: string): Promise<{ message: string }> => {
+    const res = await fetch('/api/v1/maintenance/restore-from-disk', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (!res.ok) throw new Error(await errorMessage(res, 'Restore failed'))
+    return res.json()
   },
   /**
-   * Open the OS data folder via the Tauri command when running in the desktop
-   * shell; otherwise resolve the path so the caller can display it.
+   * Ask the local backend to reveal the data folder in the OS file manager.
+   * The backend runs on the same machine as the desktop shell, so this works
+   * without relying on the webview's remote-origin Tauri IPC. Returns
+   * `opened: false` plus the path when the launcher is unavailable so the caller
+   * can display it instead.
    */
   openDataFolder: async (): Promise<{ opened: boolean; path: string }> => {
-    const invoke = window.__TAURI__?.core?.invoke
-    if (invoke) {
-      const path = (await invoke('open_data_folder')) as string
-      return { opened: true, path }
-    }
-    const path = await maintenanceApi.dataLocation()
-    return { opened: false, path }
+    const res = await fetch('/api/v1/maintenance/open-data-folder', { method: 'POST', credentials: 'include' })
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not open the data folder'))
+    return (await res.json()) as { opened: boolean; path: string }
   },
 }

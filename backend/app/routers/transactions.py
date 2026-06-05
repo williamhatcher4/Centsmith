@@ -17,7 +17,10 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.import_profile import ColumnMappingIn
 from app.services.statement_import_service import ColumnMapping
+from app.models.card import Card
 from app.schemas.transaction import (
+    BulkAssignCardRequest,
+    BulkAssignCardResult,
     BulkCategorizeRequest,
     BulkCategorizeResult,
     BulkClassifyRequest,
@@ -44,6 +47,9 @@ from app.services.transaction_import_service import (
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 INCOME_CATEGORIES = {"Income", "Reimbursement"}
+# Reimbursements are credit-only but offset a prior expense, so they are not
+# counted as income. Only true "Income" credits aggregate into income totals.
+INCOME_CATEGORY = "Income"
 TRANSFER_CATEGORY = "Transfer"
 
 
@@ -169,6 +175,7 @@ def list_transactions(
     classification: Optional[Literal["personal", "work", "unsorted"]] = Query(None),
     personal_category: Optional[str] = Query(None, max_length=80),
     expensed: Optional[bool] = Query(None),
+    card_id: Optional[int] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     skip: int = Query(0, ge=0),
@@ -176,10 +183,12 @@ def list_transactions(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if personal_category or classification in {"unsorted", "personal", "work"}:
+    if personal_category or classification in {"unsorted", "personal", "work"} or card_id is not None:
         q = db.query(Transaction)
     else:
         q = _base_query(db)
+    if card_id is not None:
+        q = q.filter(Transaction.card_id == card_id)
     if classification == "unsorted":
         q = q.filter(Transaction.classification.is_(None))
     elif classification in {"personal", "work"}:
@@ -275,14 +284,17 @@ async def confirm_import(
     charges_positive: Optional[bool] = Form(None),
     column_mapping: Optional[str] = Form(None),
     profile_id: Optional[int] = Form(None),
+    card_id: Optional[int] = Form(None),
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if card_id is not None and not db.query(Card).filter(Card.id == card_id).first():
+        raise HTTPException(status_code=404, detail="Card not found")
     try:
         mapping, ignored_patterns = _resolve_import_mapping(db, column_mapping, profile_id)
         raw = await read_limited_upload(file)
         return confirm_statement_import(
-            db, raw, file.filename or "statement.csv", "card", charges_positive, mapping, ignored_patterns
+            db, raw, file.filename or "statement.csv", "card", charges_positive, mapping, ignored_patterns, card_id
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -370,6 +382,24 @@ def bulk_categorize_personal(
     return BulkCategorizeResult(updated=len(txs))
 
 
+@router.post("/bulk-assign-card", response_model=BulkAssignCardResult)
+def bulk_assign_card(
+    payload: BulkAssignCardRequest,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if payload.card_id is not None and not db.query(Card).filter(Card.id == payload.card_id).first():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found")
+    txs = db.query(Transaction).filter(Transaction.id.in_(payload.transaction_ids)).all()
+    if len(txs) != len(set(payload.transaction_ids)):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more transactions were not found")
+    for tx in txs:
+        tx.card_id = payload.card_id
+        tx.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return BulkAssignCardResult(updated=len(txs))
+
+
 @router.put("/{tx_id}", response_model=TransactionOut)
 def update_transaction(
     tx_id: int,
@@ -381,6 +411,8 @@ def update_transaction(
     if not tx:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("card_id") is not None and not db.query(Card).filter(Card.id == updates["card_id"]).first():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found")
     if updates.get("expensed") and updates.get("classification", tx.classification) != "work":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only work transactions can be marked as expensed")
     next_classification = updates.get("classification", tx.classification)
@@ -637,7 +669,7 @@ def personal_income(
     ).filter(
         Transaction.classification == "personal",
         Transaction.transaction_type == "credit",
-        Transaction.personal_category.in_(list(INCOME_CATEGORIES)),
+        Transaction.personal_category == INCOME_CATEGORY,
     ).group_by("month").order_by("month").all()
     selected_months = [month for month, _ in month_rows][-months:]
 
@@ -650,7 +682,7 @@ def personal_income(
         ).filter(
             Transaction.classification == "personal",
             Transaction.transaction_type == "credit",
-            Transaction.personal_category.in_(list(INCOME_CATEGORIES)),
+            Transaction.personal_category == INCOME_CATEGORY,
             func.strftime("%Y-%m", Transaction.transaction_date).in_(selected_months),
         ).group_by("month", "category").order_by("month", "category").all()
 

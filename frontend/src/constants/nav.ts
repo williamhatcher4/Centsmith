@@ -1,4 +1,4 @@
-import { BarChart3, Download, Inbox, ReceiptText, Settings as SettingsIcon, Tags, TrendingDown } from 'lucide-react'
+import { BarChart3, CreditCard, Download, Inbox, ReceiptText, Settings as SettingsIcon, Tags, TrendingDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export interface NavLinkDef {
@@ -15,6 +15,7 @@ export const NAV_LINKS: NavLinkDef[] = [
   { to: '/transactions', label: 'Transactions', icon: ReceiptText, hideable: true },
   { to: '/spending', label: 'Spending', icon: TrendingDown, hideable: true },
   { to: '/exports', label: 'Exports', icon: Download, hideable: true },
+  { to: '/statements', label: 'Statements', icon: CreditCard, hideable: true },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, hideable: false },
 ]
 

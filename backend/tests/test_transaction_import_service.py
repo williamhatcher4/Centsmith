@@ -112,7 +112,7 @@ def test_rows_for_source_card_drops_card_payment_credits():
     ]
     kept, ignored = _rows_for_source(rows, "card")
     assert [r.source_hash for r in kept] == ["a", "c"]
-    assert ignored == 1
+    assert [r.source_hash for r in ignored] == ["b"]
 
 
 def test_rows_for_source_checking_keeps_all_rows():
@@ -122,7 +122,7 @@ def test_rows_for_source_checking_keeps_all_rows():
     ]
     kept, ignored = _rows_for_source(rows, "checking")
     assert [r.source_hash for r in kept] == ["a", "b"]
-    assert ignored == 0
+    assert ignored == []
 
 
 def test_existing_hashes_returns_intersection(tmp_path, monkeypatch):
@@ -233,8 +233,11 @@ def test_preview_qfx_card_import_ignores_payment_credit(tmp_path, monkeypatch):
         assert preview.total == 2
         assert preview.ignored_credits == 1
         assert preview.to_import == 1
-        assert [(row.description, row.transaction_type, row.amount_cents) for row in preview.rows] == [
-            ("Coffee shop", "debit", 425),
+        # The ignored card-payment credit is still shown in the preview (flagged) so
+        # the user can see what's being excluded, alongside the importable debit.
+        assert [(row.description, row.transaction_type, row.amount_cents, row.is_ignored_credit) for row in preview.rows] == [
+            ("Coffee shop", "debit", 425, False),
+            ("PAYMENT - THANK YOU", "credit", 10000, True),
         ]
     finally:
         db.close()

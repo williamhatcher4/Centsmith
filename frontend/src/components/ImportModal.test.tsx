@@ -116,6 +116,32 @@ describe('ImportModal Phase 2 undo flow', () => {
     await waitFor(() => expect(deletedId).toBe('undo-me'))
   })
 
+  it('shows ignored credit rows in the preview with a "credit ignored" badge', async () => {
+    server.use(
+      http.post('/api/v1/transactions/import/preview', () =>
+        HttpResponse.json({
+          ...PREVIEW_PAYLOAD,
+          rows: [
+            { row_number: 1, date: '2026-05-01', description: 'Coffee', amount_cents: 425, transaction_type: 'debit', is_duplicate: false, is_ignored_credit: false },
+            { row_number: 2, date: '2026-05-02', description: 'PAYMENT - THANK YOU', amount_cents: 10000, transaction_type: 'credit', is_duplicate: false, is_ignored_credit: true },
+          ],
+          total: 2,
+          ignored_credits: 1,
+          to_import: 1,
+        }),
+      ),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+
+    await screen.findByText(/To import/i)
+    expect(screen.getByText('PAYMENT - THANK YOU')).toBeInTheDocument()
+    expect(screen.getByText(/credit ignored/i)).toBeInTheDocument()
+  })
+
   it('does not show an Undo toast when the import imported zero rows', async () => {
     server.use(
       http.post('/api/v1/transactions/import/preview', () => HttpResponse.json(PREVIEW_PAYLOAD)),
