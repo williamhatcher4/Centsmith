@@ -437,7 +437,17 @@ def update_transaction(
 
 
 def _export_rows(db: Session, classification: Literal["personal", "work"], start_date: Optional[date], end_date: Optional[date]):
-    q = db.query(Transaction).filter(
+    # Select only the columns the CSV needs instead of hydrating full ORM
+    # Transaction objects — on large ledgers (tens of thousands of rows) ORM
+    # instance construction dominates the export time.
+    q = db.query(
+        Transaction.transaction_date,
+        Transaction.description,
+        Transaction.classification,
+        Transaction.transaction_type,
+        Transaction.amount_cents,
+        Transaction.expensed,
+    ).filter(
         Transaction.classification == classification,
         Transaction.transaction_type == "debit",
     )
