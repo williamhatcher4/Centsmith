@@ -35,6 +35,24 @@ jobs:
       - name: Checkout private source
         uses: actions/checkout@v4
 
+      - name: Extract release notes from CHANGELOG
+        shell: pwsh
+        run: |
+          $tag = "${{ env.RELEASE_TAG }}"
+          $version = $tag.TrimStart('v')
+          $changelog = Get-Content -Raw -LiteralPath "CHANGELOG.md"
+          $escaped = [regex]::Escape($version)
+          # Body between "## [x.y.z] ..." and the next "## " heading (or EOF).
+          $rx = "(?ms)^##\s*\[$escaped\][^\n]*\n(.*?)(?=^##\s|\z)"
+          $m = [regex]::Match($changelog, $rx)
+          if (-not $m.Success -or [string]::IsNullOrWhiteSpace($m.Groups[1].Value)) {
+            throw "No CHANGELOG.md section found for version $version. Add a '## [$version]' entry before tagging."
+          }
+          $notes = $m.Groups[1].Value.Trim()
+          $notesPath = Join-Path $env:RUNNER_TEMP "centsmith-release-notes.md"
+          Set-Content -LiteralPath $notesPath -Value $notes -Encoding utf8
+          "RELEASE_NOTES_PATH=$notesPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Validate Cloudflare release credentials
         shell: pwsh
         env:
@@ -141,6 +159,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           $ErrorActionPreference = "Stop"
+          $notes = Get-Content -Raw -LiteralPath $env:RELEASE_NOTES_PATH
           $bundleDir = "desktop\src-tauri\target\release\bundle\nsis"
           $installer = Get-ChildItem -LiteralPath $bundleDir -Filter "*.exe" |
             Sort-Object Length -Descending |
@@ -172,6 +191,7 @@ jobs:
             size_bytes = $installer.Length
             sha256 = $sha256
             published_at = $publishedAt
+            notes = $notes
           }
 
           $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $latestPath -Encoding utf8
@@ -194,6 +214,7 @@ jobs:
           $updaterPath = Join-Path $env:RUNNER_TEMP "centsmith-updater.json"
           $updater = [ordered]@{
             version = $version
+            notes = $notes
             pub_date = $publishedAt
             platforms = [ordered]@{
               "windows-x86_64" = [ordered]@{
