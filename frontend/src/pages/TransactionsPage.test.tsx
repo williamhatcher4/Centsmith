@@ -52,6 +52,36 @@ describe('TransactionsPage', () => {
     })
   })
 
+  it('initializes the date range and category from URL search params (deep link)', async () => {
+    const calls: string[] = []
+    server.use(
+      http.get('/api/v1/transactions', ({ request }) => {
+        calls.push(new URL(request.url).search)
+        return HttpResponse.json(pageOf([]))
+      }),
+    )
+    renderWithProviders(<TransactionsPage />, { route: '/transactions?classification=personal&personal_category=Groceries&start_date=2026-05-01&end_date=2026-05-31' })
+
+    // Date inputs reflect the URL params...
+    expect((await screen.findByLabelText('From') as HTMLInputElement).value).toBe('2026-05-01')
+    expect((screen.getByLabelText('To') as HTMLInputElement).value).toBe('2026-05-31')
+    expect((screen.getByLabelText('Category') as HTMLSelectElement).value).toBe('Groceries')
+
+    // ...and flow through to the API request.
+    await waitFor(() => {
+      const latest = calls[calls.length - 1]
+      expect(latest).toContain('start_date=2026-05-01')
+      expect(latest).toContain('end_date=2026-05-31')
+      expect(latest).toContain('personal_category=Groceries')
+    })
+  })
+
+  it('ignores malformed date params from the URL', async () => {
+    renderWithProviders(<TransactionsPage />, { route: '/transactions?start_date=not-a-date&end_date=05%2F31%2F2026' })
+    expect((await screen.findByLabelText('From') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('To') as HTMLInputElement).value).toBe('')
+  })
+
   it('auto-opens the add modal from the action URL param', async () => {
     renderWithProviders(<TransactionsPage />, { route: '/transactions?action=add' })
     expect(await screen.findByRole('dialog')).toBeInTheDocument()

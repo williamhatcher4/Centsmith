@@ -296,6 +296,9 @@ function readClassificationParam(value: string | null): ClassificationFilter {
 function readExpensedParam(value: string | null): ExpensedFilter {
   return value === 'expensed' || value === 'unexpensed' ? value : 'all'
 }
+function readDateParam(value: string | null): string {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
+}
 
 export function TransactionsPage() {
   const [searchParams] = useSearchParams()
@@ -306,8 +309,8 @@ export function TransactionsPage() {
   const [classification, setClassification] = useState<ClassificationFilter>(() => readClassificationParam(searchParams.get('classification')))
   const [expensed, setExpensed] = useState<ExpensedFilter>(() => readExpensedParam(searchParams.get('expensed')))
   const [personalCategory, setPersonalCategory] = useState(() => searchParams.get('personal_category') || 'all')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [startDate, setStartDate] = useState(() => readDateParam(searchParams.get('start_date')))
+  const [endDate, setEndDate] = useState(() => readDateParam(searchParams.get('end_date')))
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [assignCardId, setAssignCardId] = useState('')
   const qc = useQueryClient()

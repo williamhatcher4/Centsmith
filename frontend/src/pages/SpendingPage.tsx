@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { ChevronRight } from 'lucide-react'
 import { transactionsApi } from '../api/transactions'
 import type { SpendingByCategory } from '../types'
 import { formatMoney } from '../utils/money'
@@ -15,29 +17,60 @@ function colorFor(index: number) {
   return CATEGORY_COLORS[index % CATEGORY_COLORS.length]
 }
 
-function CategoryRow({ category, color, perMonthCents }: { category: SpendingByCategory; color: string; perMonthCents?: number }) {
+// label is the raw "YYYY-MM" month key from the spending endpoint
+function monthRange(label: string) {
+  const [y, m] = label.split('-').map(Number) // m is 1-based
+  const last = new Date(y, m, 0).getDate() // day 0 of next month = last day of this month
+  return { start: `${label}-01`, end: `${label}-${String(last).padStart(2, '0')}` }
+}
+
+function CategoryRowContent({ category, color, perMonthCents, showChevron }: { category: SpendingByCategory; color: string; perMonthCents?: number; showChevron?: boolean }) {
   return (
-    <div>
+    <>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: color }} />
           <span className="truncate text-sm font-medium text-[var(--text)]">{category.category_name}</span>
         </div>
-        <div className="text-right">
-          <div className="text-sm font-semibold tabular-nums text-[var(--text)]">{formatMoney(category.amount_cents)}</div>
-          {perMonthCents !== undefined && <div className="text-[11px] text-[var(--text-faint)]">{formatMoney(perMonthCents)} per month</div>}
+        <div className="flex items-baseline gap-1.5 text-right">
+          <div>
+            <div className="text-sm font-semibold tabular-nums text-[var(--text)]">{formatMoney(category.amount_cents)}</div>
+            {perMonthCents !== undefined && <div className="text-[11px] text-[var(--text-faint)]">{formatMoney(perMonthCents)} per month</div>}
+          </div>
+          {showChevron && <ChevronRight aria-hidden="true" className="size-4 shrink-0 self-center text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100" />}
         </div>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
         <div className="h-full rounded-full transition-[width] duration-500 ease-[var(--ease-out)]" style={{ width: `${Math.max(0, Math.min(100, category.percent))}%`, background: color }} />
       </div>
       <div className="mt-1 text-[11px] text-[var(--text-faint)]">{category.percent.toFixed(1)}%</div>
+    </>
+  )
+}
+
+function CategoryRow({ category, color, perMonthCents, onSelect, selectLabel }: { category: SpendingByCategory; color: string; perMonthCents?: number; onSelect?: () => void; selectLabel?: string }) {
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-label={selectLabel ?? `View ${category.category_name} transactions`}
+        className="group -mx-2 block w-full rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      >
+        <CategoryRowContent category={category} color={color} perMonthCents={perMonthCents} showChevron />
+      </button>
+    )
+  }
+  return (
+    <div>
+      <CategoryRowContent category={category} color={color} perMonthCents={perMonthCents} />
     </div>
   )
 }
 
 export function SpendingPage() {
   const reduced = useReducedMotion()
+  const navigate = useNavigate()
   const [months, setMonths] = useState(12)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const { data, isLoading } = useQuery({ queryKey: ['spending', months], queryFn: () => transactionsApi.personalSpending(months) })
@@ -49,6 +82,17 @@ export function SpendingPage() {
   const selectedIndex = hoverIndex ?? points.length - 1
   const hoveredPoint = selectedIndex >= 0 && selectedIndex < points.length ? points[selectedIndex] : null
   const hoveredCategories = hoveredPoint?.by_category ?? []
+
+  function openCategory(categoryName: string, monthLabel: string) {
+    const { start, end } = monthRange(monthLabel)
+    const params = new URLSearchParams({
+      classification: 'personal',
+      personal_category: categoryName === 'Uncategorized' ? 'uncategorized' : categoryName,
+      start_date: start,
+      end_date: end,
+    })
+    navigate(`/transactions?${params.toString()}`)
+  }
 
   return (
     <div>
@@ -128,7 +172,16 @@ export function SpendingPage() {
                   <p className="text-sm text-[var(--text-subtle)]">No personal spending in this month.</p>
                 ) : (
                   <div key={hoveredPoint?.label} className="flex flex-col gap-4 animate-[fadeIn_220ms_var(--ease-out)]">
-                    {hoveredCategories.map((category, index) => <CategoryRow key={category.category_name} category={category} color={colorFor(index)} />)}
+                    <p className="text-[11px] text-[var(--text-faint)]">Click a category to view its transactions</p>
+                    {hoveredCategories.map((category, index) => (
+                      <CategoryRow
+                        key={category.category_name}
+                        category={category}
+                        color={colorFor(index)}
+                        onSelect={hoveredPoint ? () => openCategory(category.category_name, hoveredPoint.label) : undefined}
+                        selectLabel={hoveredPoint ? `View ${category.category_name} transactions for ${hoveredPoint.label}` : undefined}
+                      />
+                    ))}
                   </div>
                 )}
               </Card>
