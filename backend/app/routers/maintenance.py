@@ -12,17 +12,24 @@ from app.models.user_settings import UserSettings
 from app.services.maintenance_service import (
     backup_database,
     build_support_bundle,
+    clear_license_token,
     database_path,
+    license_status,
     list_disk_backups,
     restore_database,
     restore_from_disk,
     reveal_in_file_manager,
     write_backup_to_disk,
+    write_license_token,
 )
 
 
 class RestoreFromDiskRequest(BaseModel):
     name: str
+
+
+class LicenseTokenRequest(BaseModel):
+    token: str
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 
@@ -141,6 +148,40 @@ async def restore_backup(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "restored", "message": "Data restored. Reload the app to see your restored data."}
+
+
+@router.get("/license")
+def get_license(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Whether an update license is stored, with a masked hint (never the token).
+
+    Licensing moved off Tauri IPC to the local backend: the desktop webview is
+    served from a remote origin where ``window.__TAURI__`` invoke is unreliable,
+    so the token is read/written here and lands beside the database — the same
+    file the Tauri updater reads as a bearer header.
+    """
+    return license_status(_engine(db))
+
+
+@router.post("/license")
+def set_license(
+    payload: LicenseTokenRequest,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Store the pasted update license (blank clears it); returns masked status."""
+    return write_license_token(_engine(db), payload.token)
+
+
+@router.delete("/license")
+def delete_license(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove the stored update license; returns status."""
+    return clear_license_token(_engine(db))
 
 
 @router.get("/support-bundle")

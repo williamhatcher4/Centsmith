@@ -1,14 +1,16 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
+import { server } from '../test/server'
 import { renderWithProviders } from '../test/renderWithProviders'
 import { LicenseUpdatesCard } from './LicenseUpdatesCard'
 
-const invoke = vi.fn()
-
+// The card renders only inside the desktop shell, gated on the `__TAURI__`
+// global. License read/write goes through the local backend
+// (`/api/v1/maintenance/license`), not Tauri IPC, so these tests drive MSW.
 beforeEach(() => {
-  invoke.mockReset()
-  window.__TAURI__ = { core: { invoke } }
+  window.__TAURI__ = { core: { invoke: () => Promise.resolve() } }
 })
 
 afterEach(() => {
@@ -17,17 +19,19 @@ afterEach(() => {
 
 describe('LicenseUpdatesCard', () => {
   it('shows the disabled state when no license is stored', async () => {
-    invoke.mockResolvedValue({ present: false, hint: null })
     renderWithProviders(<LicenseUpdatesCard />)
     expect(await screen.findByText(/no license entered/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
   })
 
   it('saves a pasted license and reflects the active status', async () => {
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'set_license_token') return Promise.resolve({ present: true, hint: '…WXYZ' })
-      return Promise.resolve({ present: false, hint: null })
-    })
+    let sentToken: string | null = null
+    server.use(
+      http.post('/api/v1/maintenance/license', async ({ request }) => {
+        sentToken = ((await request.json()) as { token: string }).token
+        return HttpResponse.json({ present: true, hint: '…WXYZ' })
+      }),
+    )
     const user = userEvent.setup()
     renderWithProviders(<LicenseUpdatesCard />)
     await screen.findByText(/no license entered/i)
@@ -37,11 +41,17 @@ describe('LicenseUpdatesCard', () => {
 
     expect(await screen.findByText(/active license ending/i)).toBeInTheDocument()
     expect(screen.getByText('…WXYZ')).toBeInTheDocument()
-    expect(invoke).toHaveBeenCalledWith('set_license_token', { token: 'my-key-WXYZ' })
+    expect(sentToken).toBe('my-key-WXYZ')
   })
 
   it('does not call the backend when saving with an empty field', async () => {
-    invoke.mockResolvedValue({ present: false, hint: null })
+    let called = false
+    server.use(
+      http.post('/api/v1/maintenance/license', () => {
+        called = true
+        return HttpResponse.json({ present: false, hint: null })
+      }),
+    )
     const user = userEvent.setup()
     renderWithProviders(<LicenseUpdatesCard />)
     await screen.findByText(/no license entered/i)
@@ -49,15 +59,18 @@ describe('LicenseUpdatesCard', () => {
     await user.click(screen.getByRole('button', { name: /save/i }))
 
     expect(await screen.findByText(/paste your license key first/i)).toBeInTheDocument()
-    expect(invoke).not.toHaveBeenCalledWith('set_license_token', expect.anything())
+    expect(called).toBe(false)
   })
 
   it('removes a stored license', async () => {
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_license_status') return Promise.resolve({ present: true, hint: '…WXYZ' })
-      if (cmd === 'clear_license_token') return Promise.resolve({ present: false, hint: null })
-      return Promise.resolve({ present: false, hint: null })
-    })
+    let cleared = false
+    server.use(
+      http.get('/api/v1/maintenance/license', () => HttpResponse.json({ present: true, hint: '…WXYZ' })),
+      http.delete('/api/v1/maintenance/license', () => {
+        cleared = true
+        return HttpResponse.json({ present: false, hint: null })
+      }),
+    )
     const user = userEvent.setup()
     renderWithProviders(<LicenseUpdatesCard />)
     expect(await screen.findByText(/active license ending/i)).toBeInTheDocument()
@@ -65,6 +78,15 @@ describe('LicenseUpdatesCard', () => {
     await user.click(screen.getByRole('button', { name: /remove/i }))
 
     expect(await screen.findByText(/no license entered/i)).toBeInTheDocument()
-    expect(invoke).toHaveBeenCalledWith('clear_license_token')
+    expect(cleared).toBe(true)
+  })
+
+  it('surfaces a backend error when reading status fails', async () => {
+    server.use(
+      http.get('/api/v1/maintenance/license', () => HttpResponse.json({ detail: 'boom' }, { status: 500 })),
+    )
+    renderWithProviders(<LicenseUpdatesCard />)
+    // Read failures fall back to the no-license state (the card still renders).
+    expect(await screen.findByText(/no license entered/i)).toBeInTheDocument()
   })
 })

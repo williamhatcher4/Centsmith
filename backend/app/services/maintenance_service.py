@@ -85,6 +85,62 @@ def backups_dir(engine: Engine) -> Path:
     return database_path(engine).parent / "backups"
 
 
+# Filename of the update-license token, kept beside the database. This is the
+# SAME path the desktop shell's updater reads (``user_data_dir()/license.token``
+# in Rust), because the database lives in that data dir — so writing it here from
+# the local backend is what makes the token visible to the Tauri updater. The
+# license commands moved from Tauri IPC to the backend because the webview's
+# remote-origin IPC is unreliable (same reason as backup/open-data-folder).
+LICENSE_FILE_NAME = "license.token"
+
+
+def license_token_path(engine: Engine) -> Path:
+    """Where the update-license token is stored (beside the database)."""
+    return database_path(engine).parent / LICENSE_FILE_NAME
+
+
+def _mask_token(token: str) -> str:
+    """Mask a token to its last four characters (e.g. ``…AB12``) for display."""
+    return "…" + token.strip()[-4:]
+
+
+def read_license_token(engine: Engine) -> Optional[str]:
+    """Return the stored license token, or None when absent/blank."""
+    path = license_token_path(engine)
+    try:
+        trimmed = path.read_text(encoding="utf-8").strip()
+    except (FileNotFoundError, OSError):
+        return None
+    return trimmed or None
+
+
+def license_status(engine: Engine) -> dict:
+    """Report whether a license is stored, with a masked hint for display.
+
+    Never returns the full token — only ``present`` plus a masked tail, matching
+    the desktop shell's old ``LicenseStatus`` shape the UI already expects.
+    """
+    token = read_license_token(engine)
+    if token is None:
+        return {"present": False, "hint": None}
+    return {"present": True, "hint": _mask_token(token)}
+
+
+def write_license_token(engine: Engine, token: str) -> dict:
+    """Persist a license token (blank clears it, mirroring the shell) and return status."""
+    trimmed = token.strip()
+    if not trimmed:
+        return clear_license_token(engine)
+    license_token_path(engine).write_text(trimmed, encoding="utf-8")
+    return license_status(engine)
+
+
+def clear_license_token(engine: Engine) -> dict:
+    """Remove the stored license token (idempotent) and return status."""
+    license_token_path(engine).unlink(missing_ok=True)
+    return license_status(engine)
+
+
 def write_backup_to_disk(engine: Engine) -> Path:
     """Write a backup file into a ``backups/`` folder beside the database.
 

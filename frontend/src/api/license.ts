@@ -13,35 +13,49 @@ export interface LicenseStatus {
   hint: string | null
 }
 
-function tauriInvoke() {
-  return window.__TAURI__?.core?.invoke
+/**
+ * True only inside the desktop shell, where auto-update (and therefore the
+ * license) is relevant. The `__TAURI__` global is reliably injected on every
+ * page (`withGlobalTauri`), so it's a safe render gate — but the license
+ * *operations* go through the local backend below, not Tauri IPC, because the
+ * webview's remote-origin IPC invoke is unreliable for the backend-served page
+ * (same reason backup / open-data-folder moved to the backend).
+ */
+export function isDesktop(): boolean {
+  return !!window.__TAURI__
 }
 
-/** True only inside the desktop shell, where the license commands exist. */
-export function isDesktop(): boolean {
-  return !!tauriInvoke()
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => null)
+  return (body && typeof body.detail === 'string' && body.detail) || fallback
 }
 
 /**
- * Manage the update license token that gates auto-update. The token lives on
- * the Rust side (a file the updater reads); these are thin Tauri-command
- * bridges. Licensing is desktop-only, so the web build never sees this UI.
+ * Manage the update license token that gates auto-update. The token is stored by
+ * the local backend in the data dir (the same `license.token` file the Tauri
+ * updater reads as a bearer header); these are thin REST bridges. Licensing is
+ * desktop-only, so the card is only rendered when `isDesktop()`.
  */
 export const licenseApi = {
   isDesktop,
   getStatus: async (): Promise<LicenseStatus> => {
-    const invoke = tauriInvoke()
-    if (!invoke) return { present: false, hint: null }
-    return (await invoke('get_license_status')) as LicenseStatus
+    const res = await fetch('/api/v1/maintenance/license', { credentials: 'include' })
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not read license status'))
+    return (await res.json()) as LicenseStatus
   },
   set: async (token: string): Promise<LicenseStatus> => {
-    const invoke = tauriInvoke()
-    if (!invoke) throw new Error('License management is only available in the desktop app.')
-    return (await invoke('set_license_token', { token })) as LicenseStatus
+    const res = await fetch('/api/v1/maintenance/license', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not save license'))
+    return (await res.json()) as LicenseStatus
   },
   clear: async (): Promise<LicenseStatus> => {
-    const invoke = tauriInvoke()
-    if (!invoke) throw new Error('License management is only available in the desktop app.')
-    return (await invoke('clear_license_token')) as LicenseStatus
+    const res = await fetch('/api/v1/maintenance/license', { method: 'DELETE', credentials: 'include' })
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not remove license'))
+    return (await res.json()) as LicenseStatus
   },
 }

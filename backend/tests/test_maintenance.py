@@ -292,3 +292,62 @@ def test_support_bundle_excludes_secrets_and_financial_data(env, tmp_path, monke
     assert "[redacted]" in text
     # Non-financial settings summary is present.
     assert "Groceries" in text
+
+
+# --- License token (moved from Tauri IPC to the local backend) -----------------
+
+
+def _license_file(env) -> Path:
+    """The token file lives beside the database — the path the updater reads."""
+    return env.db_path.parent / "license.token"
+
+
+def test_license_status_absent_by_default(env):
+    resp = env.client.get("/api/v1/maintenance/license")
+    assert resp.status_code == 200
+    assert resp.json() == {"present": False, "hint": None}
+    assert not _license_file(env).exists()
+
+
+def test_set_license_writes_token_and_masks_hint(env):
+    resp = env.client.post("/api/v1/maintenance/license", json={"token": "  lic-ABCD1234  "})
+    assert resp.status_code == 200
+    # Never returns the full token — only present + a masked tail.
+    assert resp.json() == {"present": True, "hint": "…1234"}
+    # The trimmed token lands in the file the Tauri updater reads.
+    assert _license_file(env).read_text(encoding="utf-8") == "lic-ABCD1234"
+
+    # A follow-up status read reflects the stored token.
+    status = env.client.get("/api/v1/maintenance/license")
+    assert status.json() == {"present": True, "hint": "…1234"}
+
+
+def test_set_blank_license_clears_existing(env):
+    env.client.post("/api/v1/maintenance/license", json={"token": "real-token"})
+    assert _license_file(env).exists()
+    resp = env.client.post("/api/v1/maintenance/license", json={"token": "   "})
+    assert resp.status_code == 200
+    assert resp.json() == {"present": False, "hint": None}
+    assert not _license_file(env).exists()
+
+
+def test_delete_license_is_idempotent(env):
+    # Removing a non-existent token succeeds.
+    resp = env.client.delete("/api/v1/maintenance/license")
+    assert resp.status_code == 200
+    assert resp.json() == {"present": False, "hint": None}
+
+    env.client.post("/api/v1/maintenance/license", json={"token": "real-token"})
+    assert _license_file(env).exists()
+    resp = env.client.delete("/api/v1/maintenance/license")
+    assert resp.status_code == 200
+    assert resp.json() == {"present": False, "hint": None}
+    assert not _license_file(env).exists()
+
+
+def test_license_endpoints_require_auth(env):
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+    assert client.get("/api/v1/maintenance/license").status_code == 401
+    assert client.post("/api/v1/maintenance/license", json={"token": "x"}).status_code == 401
+    assert client.delete("/api/v1/maintenance/license").status_code == 401

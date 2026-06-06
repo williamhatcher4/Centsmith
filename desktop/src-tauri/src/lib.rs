@@ -10,9 +10,9 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent};
-use tauri_plugin_dialog::DialogExt;
+// Dialog API is used only by the release-only update prompt below.
 #[cfg(not(debug_assertions))]
-use tauri_plugin_dialog::{MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 #[cfg(not(debug_assertions))]
 use tauri_plugin_updater::UpdaterExt;
 
@@ -25,6 +25,7 @@ struct BackendJob(Mutex<Option<usize>>);
 const BACKEND_DIR_NAME: &str = "backend";
 const BACKEND_EXE_NAME: &str = "centsmith-backend.exe";
 const RUNTIME_FILE_NAME: &str = "runtime.json";
+#[cfg_attr(debug_assertions, allow(dead_code))]
 const LICENSE_FILE_NAME: &str = "license.token";
 const BOOTSTRAP_PATH: &str = "/desktop-bootstrap";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -62,63 +63,22 @@ fn dirs_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-/// The OS file-manager launcher used to reveal the data folder.
-fn file_manager_program() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "explorer"
-    } else if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    }
-}
-
-/// Open the Centsmith data folder in the OS file manager. Returns the path so the
-/// UI can fall back to displaying it if the launcher is unavailable.
-#[tauri::command]
-fn open_data_folder() -> Result<String, String> {
-    let dir = user_data_dir();
-    let path = dir.to_string_lossy().to_string();
-    Command::new(file_manager_program())
-        .arg(&path)
-        .spawn()
-        .map_err(|e| format!("failed to open data folder: {e}"))?;
-    Ok(path)
-}
-
-/// Save bytes the UI already fetched (e.g. a database backup) to a user-chosen
-/// path. WebView2 ignores programmatic `<a download>` clicks, so the desktop
-/// build routes downloads through this native save dialog instead. Returns
-/// `false` when the user cancels the dialog so the UI can stay silent.
-#[tauri::command]
-fn save_download(app: AppHandle, filename: String, bytes: Vec<u8>) -> Result<bool, String> {
-    let Some(file) = app
-        .dialog()
-        .file()
-        .set_file_name(&filename)
-        .blocking_save_file()
-    else {
-        return Ok(false);
-    };
-    let path = file.into_path().map_err(|e| format!("invalid save path: {e}"))?;
-    fs::write(&path, &bytes).map_err(|e| format!("failed to write file: {e}"))?;
-    Ok(true)
-}
-
-/// Status of the locally stored update license token. Never carries the full
-/// token back to the UI — only whether one exists and a masked tail for display.
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
-struct LicenseStatus {
-    present: bool,
-    hint: Option<String>,
-}
-
+// Used by the release-only updater (`#[cfg(not(debug_assertions))]`) and tests,
+// so a plain debug build sees them as unused — allow that without hiding real
+// dead code in release.
+#[cfg_attr(debug_assertions, allow(dead_code))]
 fn license_token_path(dir: &Path) -> PathBuf {
     dir.join(LICENSE_FILE_NAME)
 }
 
 /// Read the stored license token, returning `None` when the file is absent or
 /// blank. The token is the gate the updater attaches as a bearer header.
+///
+/// Reading/writing the token from the UI moved to the local backend
+/// (`/api/v1/maintenance/license`) because the desktop webview is served from a
+/// remote origin where Tauri IPC `invoke` is unreliable. The backend writes this
+/// same `license.token` file in the data dir, so the updater still reads it here.
+#[cfg_attr(debug_assertions, allow(dead_code))]
 fn read_license_token_from(dir: &Path) -> Option<String> {
     let contents = fs::read_to_string(license_token_path(dir)).ok()?;
     let trimmed = contents.trim();
@@ -127,62 +87,6 @@ fn read_license_token_from(dir: &Path) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
-}
-
-/// Persist a license token. A blank/whitespace-only value clears it instead, so
-/// the UI can treat "save empty" the same as "remove".
-fn write_license_token_to(dir: &Path, token: &str) -> std::io::Result<()> {
-    let trimmed = token.trim();
-    let path = license_token_path(dir);
-    if trimmed.is_empty() {
-        return clear_license_token_from(dir);
-    }
-    fs::write(path, trimmed)
-}
-
-fn clear_license_token_from(dir: &Path) -> std::io::Result<()> {
-    match fs::remove_file(license_token_path(dir)) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
-
-/// Mask a token to its last four characters (e.g. `…AB12`) so the Settings UI
-/// can confirm which license is active without revealing it.
-fn mask_token(token: &str) -> String {
-    let trimmed = token.trim();
-    let tail: String = trimmed.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
-    format!("…{tail}")
-}
-
-fn license_status_from(dir: &Path) -> LicenseStatus {
-    match read_license_token_from(dir) {
-        Some(token) => LicenseStatus { present: true, hint: Some(mask_token(&token)) },
-        None => LicenseStatus { present: false, hint: None },
-    }
-}
-
-/// Report whether an update license is stored, with a masked hint for display.
-#[tauri::command]
-fn get_license_status() -> LicenseStatus {
-    license_status_from(&user_data_dir())
-}
-
-/// Store (or, when blank, clear) the update license token pasted in Settings.
-#[tauri::command]
-fn set_license_token(token: String) -> Result<LicenseStatus, String> {
-    let dir = user_data_dir();
-    write_license_token_to(&dir, &token).map_err(|e| format!("failed to save license: {e}"))?;
-    Ok(license_status_from(&dir))
-}
-
-/// Remove the stored update license token.
-#[tauri::command]
-fn clear_license_token() -> Result<LicenseStatus, String> {
-    let dir = user_data_dir();
-    clear_license_token_from(&dir).map_err(|e| format!("failed to clear license: {e}"))?;
-    Ok(license_status_from(&dir))
 }
 
 fn debug_log(msg: &str) {
@@ -584,13 +488,11 @@ pub fn run() {
             debug_log("setup() done, navigate thread launched");
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            open_data_folder,
-            save_download,
-            get_license_status,
-            set_license_token,
-            clear_license_token
-        ])
+        // No frontend Tauri IPC commands remain — the webview is served from the
+        // local backend (a remote origin where IPC invoke is unreliable), so all
+        // shell actions (backup, open-data-folder, license) go through backend
+        // HTTP routes instead. The `withGlobalTauri` + capability `remote.urls`
+        // are kept only so `window.__TAURI__` exists for desktop detection.
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -605,18 +507,6 @@ mod tests {
     use super::*;
     use std::fs::File;
     use tempfile::tempdir;
-
-    #[test]
-    fn file_manager_program_matches_platform() {
-        let program = file_manager_program();
-        if cfg!(target_os = "windows") {
-            assert_eq!(program, "explorer");
-        } else if cfg!(target_os = "macos") {
-            assert_eq!(program, "open");
-        } else {
-            assert_eq!(program, "xdg-open");
-        }
-    }
 
     #[test]
     fn user_data_dir_is_under_centsmith() {
@@ -694,10 +584,12 @@ mod tests {
     }
 
     #[test]
-    fn license_token_round_trips_and_trims() {
+    fn read_license_token_reads_trimmed_value() {
+        // The updater reads the token file the local backend writes. Token
+        // management itself now lives in the backend (`/maintenance/license`).
         let dir = tempdir().unwrap();
         assert_eq!(read_license_token_from(dir.path()), None);
-        write_license_token_to(dir.path(), "  tok-ABCD1234  ").unwrap();
+        fs::write(license_token_path(dir.path()), "  tok-ABCD1234  ").unwrap();
         assert_eq!(
             read_license_token_from(dir.path()),
             Some("tok-ABCD1234".to_string())
@@ -705,43 +597,10 @@ mod tests {
     }
 
     #[test]
-    fn writing_blank_token_clears_existing() {
+    fn read_license_token_treats_blank_as_absent() {
         let dir = tempdir().unwrap();
-        write_license_token_to(dir.path(), "real-token").unwrap();
-        assert!(license_token_path(dir.path()).is_file());
-        write_license_token_to(dir.path(), "   ").unwrap();
+        fs::write(license_token_path(dir.path()), "   \n").unwrap();
         assert_eq!(read_license_token_from(dir.path()), None);
-        assert!(!license_token_path(dir.path()).exists());
-    }
-
-    #[test]
-    fn clear_license_token_is_idempotent() {
-        let dir = tempdir().unwrap();
-        // Removing a non-existent token is a no-op success.
-        clear_license_token_from(dir.path()).unwrap();
-        write_license_token_to(dir.path(), "real-token").unwrap();
-        clear_license_token_from(dir.path()).unwrap();
-        assert_eq!(read_license_token_from(dir.path()), None);
-    }
-
-    #[test]
-    fn license_status_masks_to_last_four_chars() {
-        let dir = tempdir().unwrap();
-        assert_eq!(
-            license_status_from(dir.path()),
-            LicenseStatus { present: false, hint: None }
-        );
-        write_license_token_to(dir.path(), "abcdef-WXYZ").unwrap();
-        assert_eq!(
-            license_status_from(dir.path()),
-            LicenseStatus { present: true, hint: Some("…WXYZ".to_string()) }
-        );
-    }
-
-    #[test]
-    fn mask_token_handles_short_tokens() {
-        assert_eq!(mask_token("ab"), "…ab");
-        assert_eq!(mask_token(""), "…");
     }
 
     #[test]
