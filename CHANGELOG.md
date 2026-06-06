@@ -13,7 +13,7 @@ matching section fails the release workflow on purpose, so every release ships w
 - Automatic release notes: each release now carries CHANGELOG notes in the desktop
   update dialog and the website download feed.
 
-## [0.2.5] - 2026-06-05
+## [0.2.6] - 2026-06-05
 ### Added
 - Statements page, automatic billing, and data backups.
 - Spending category drill-down to filtered Transactions.
