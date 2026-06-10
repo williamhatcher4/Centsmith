@@ -8,7 +8,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
-from sqlalchemy import case, func
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models.import_batch import ImportBatch
@@ -73,6 +73,34 @@ def _personal_spending_filters():
             & (Transaction.personal_category.in_(list(INCOME_CATEGORIES)))
         ),
     ]
+
+
+def _recent_activity_months(db: Session, months: int) -> list[str]:
+    """Most recent `months` calendar months that have any tracked activity.
+
+    Mirrors the dashboard window: union of personal-spend, work-spend, and
+    income months, sorted ascending, last `months` entries. Both the dashboard
+    and the spending-page income endpoint derive their window from this so the
+    two "last N months" income figures always cover the same months.
+    """
+    rows = db.query(
+        func.strftime("%Y-%m", Transaction.transaction_date)
+    ).filter(
+        or_(
+            and_(*_personal_spending_filters()),
+            and_(
+                Transaction.transaction_type == "debit",
+                Transaction.classification == "work",
+                func.coalesce(Transaction.personal_category, "") != TRANSFER_CATEGORY,
+            ),
+            and_(
+                Transaction.transaction_type == "credit",
+                Transaction.classification == "personal",
+                Transaction.personal_category.in_(list(INCOME_CATEGORIES)),
+            ),
+        )
+    ).distinct().all()
+    return sorted({month for (month,) in rows})[-months:]
 
 
 # Merchant-name normalization for the dashboard "Top merchants" rollup.
@@ -584,7 +612,11 @@ def dashboard(
         bucket = month_map.setdefault(month, {"personal": 0, "work": 0, "Income": 0, "Reimbursement": 0})
         bucket[category] = int(amount or 0)
 
-    selected = sorted(month_map.items())[-months:]
+    # Derive the window from the shared helper so the spending-page income
+    # endpoint covers exactly the same months. The helper returns only months
+    # that have activity, which always have a bucket in month_map.
+    empty_bucket = {"personal": 0, "work": 0, "Income": 0, "Reimbursement": 0}
+    selected = [(m, month_map.get(m, empty_bucket)) for m in _recent_activity_months(db, months)]
     summary_months = [
         DashboardMonth(
             month=m,
@@ -673,15 +705,10 @@ def personal_income(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    month_rows = db.query(
-        func.strftime("%Y-%m", Transaction.transaction_date).label("month"),
-        func.sum(Transaction.amount_cents).label("amount"),
-    ).filter(
-        Transaction.classification == "personal",
-        Transaction.transaction_type == "credit",
-        Transaction.personal_category == INCOME_CATEGORY,
-    ).group_by("month").order_by("month").all()
-    selected_months = [month for month, _ in month_rows][-months:]
+    # Use the same calendar-month window as the dashboard so the two "last N
+    # months" income figures always cover the same months. Months in the window
+    # with no income contribute a $0 point rather than being skipped.
+    selected_months = _recent_activity_months(db, months)
 
     category_rows = []
     if selected_months:
@@ -697,15 +724,17 @@ def personal_income(
         ).group_by("month", "category").order_by("month", "category").all()
 
     category_by_month: dict[str, list[tuple[str, int]]] = {}
+    month_amounts: dict[str, int] = {}
     category_totals: dict[str, int] = {}
     for month, category, amount in category_rows:
         cents = int(amount or 0)
         category_by_month.setdefault(month, []).append((category, cents))
+        month_amounts[month] = month_amounts.get(month, 0) + cents
         category_totals[category] = category_totals.get(category, 0) + cents
 
     points = []
-    for month, amount in month_rows[-months:]:
-        amount_cents = int(amount or 0)
+    for month in selected_months:
+        amount_cents = month_amounts.get(month, 0)
         rows = category_by_month.get(month, [])
         points.append(SpendingPoint(
             label=month,

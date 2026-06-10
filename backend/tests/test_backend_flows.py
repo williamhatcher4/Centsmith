@@ -954,6 +954,62 @@ def test_personal_income_excludes_debits(client, db_session):
     assert body["total_cents"] == 0
 
 
+def test_personal_income_window_matches_dashboard(client, db_session):
+    """Spending-page income covers the same calendar months as the dashboard.
+
+    Regression: with sparse income the spending page used to take the last N
+    *income-bearing* months, reaching back to older income the dashboard's
+    recent-N-calendar-month window excluded, so the two Income figures disagreed
+    for the nominally "same" period.
+    """
+    # Personal spending in every month from 2025-01 through 2026-02 (14 months),
+    # so the most-recent-12 window is 2025-03..2026-02.
+    spend_months = [(2025, m) for m in range(1, 13)] + [(2026, 1), (2026, 2)]
+    for year, month in spend_months:
+        add_transaction(
+            db_session,
+            description=f"Groceries {year}-{month:02d}",
+            amount_cents=1000,
+            transaction_type="debit",
+            classification="personal",
+            personal_category="Dining",
+            transaction_date=date(year, month, 1),
+        )
+
+    # Income only in some months: one OLD month (2025-01, outside the last 12)
+    # plus three recent months inside the last-12 window.
+    income_by_month = {
+        (2025, 1): 50000,  # outside the most-recent-12 window
+        (2025, 12): 100000,
+        (2026, 1): 120000,
+        (2026, 2): 90000,
+    }
+    for (year, month), cents in income_by_month.items():
+        add_transaction(
+            db_session,
+            description=f"Paycheck {year}-{month:02d}",
+            amount_cents=cents,
+            transaction_type="credit",
+            classification="personal",
+            personal_category="Income",
+            transaction_date=date(year, month, 15),
+        )
+
+    login(client)
+
+    for window in (6, 12, 24):
+        income = client.get("/api/v1/transactions/income/personal", params={"months": window}).json()
+        dashboard = client.get("/api/v1/transactions/dashboard", params={"months": window}).json()
+        assert income["total_cents"] == dashboard["income_total_cents"], f"mismatch at months={window}"
+
+    # The recent-12 window excludes the old 2025-01 income; only the 24m window
+    # reaches back far enough to include it.
+    income_12 = client.get("/api/v1/transactions/income/personal", params={"months": 12}).json()
+    assert income_12["total_cents"] == 310000
+    income_24 = client.get("/api/v1/transactions/income/personal", params={"months": 24}).json()
+    assert income_24["total_cents"] == 360000
+
+
 def test_checking_import_preview_keeps_credits(client):
     login(client)
     files = statement_file([
