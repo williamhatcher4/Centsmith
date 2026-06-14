@@ -117,11 +117,12 @@ if (-not [string]::IsNullOrWhiteSpace($License)) {
         $manifestPath = Join-Path ([System.IO.Path]::GetTempPath()) "centsmith-published-updater.json"
         Set-Content -LiteralPath $manifestPath -Value $manifest.Content -Encoding utf8
 
-        # Reuse the release schema check (semver version, RFC 3339 pub_date,
-        # non-blank signature, https url).
-        & (Join-Path $PSScriptRoot "validate-release-artifacts.ps1") -UpdaterJsonPath $manifestPath
-
-        $published = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+        # Validate the Tauri schema (semver version, RFC 3339 pub_date, non-blank
+        # signature, https url) via the shared helper. We deliberately do NOT call
+        # validate-release-artifacts.ps1 here: that script also scans the staged
+        # backend-resources folder, which doesn't exist on the contract-test runner.
+        . (Join-Path $PSScriptRoot "updater-manifest-lib.ps1")
+        $published = Test-UpdaterManifestSchema -Path $manifestPath
         $url = $published.platforms."windows-x86_64".url
         if ($null -eq $url -or -not $url.StartsWith("$BaseUrl/download/")) {
             $failures += "published windows url must start with $BaseUrl/download/; got '$url'"
