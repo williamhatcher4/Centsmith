@@ -1,7 +1,7 @@
-from typing import List
-from pydantic import BaseModel, field_validator
+from typing import List, Optional
+from pydantic import BaseModel, Field, field_validator
 
-from app.models.user_settings import SYSTEM_CATEGORIES
+from app.services.transaction_rules import INCOME_CATEGORIES, SYSTEM_CATEGORIES
 
 ALL_PAGE_SLUGS: frozenset[str] = frozenset(
     {"/", "/inbox", "/personal-inbox", "/transactions", "/spending", "/exports", "/statements"}
@@ -11,6 +11,12 @@ ALL_PAGE_SLUGS: frozenset[str] = frozenset(
 class UserSettingsOut(BaseModel):
     personal_categories: List[str]
     hidden_pages: List[str]
+    # Optional custom backup destination; null means backups/ beside the DB.
+    backup_folder: Optional[str] = None
+    # Business-rule constants surfaced so the frontend doesn't hardcode them.
+    # Not stored on UserSettings — pydantic falls back to these defaults.
+    system_categories: List[str] = Field(default_factory=lambda: sorted(SYSTEM_CATEGORIES))
+    credit_only_categories: List[str] = Field(default_factory=lambda: sorted(INCOME_CATEGORIES))
 
     model_config = {"from_attributes": True}
 
@@ -18,6 +24,10 @@ class UserSettingsOut(BaseModel):
 class UserSettingsUpdate(BaseModel):
     personal_categories: List[str]
     hidden_pages: List[str]
+    # Omitting the field leaves the stored value unchanged (the router checks
+    # model_fields_set); null or blank clears it back to the default folder.
+    # Existence/writability is validated in the router, not here.
+    backup_folder: Optional[str] = None
 
     @field_validator("personal_categories")
     @classmethod

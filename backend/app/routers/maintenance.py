@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.user_settings import UserSettings
 from app.services.maintenance_service import (
     backup_database,
+    backups_dir,
     build_support_bundle,
     clear_license_token,
     database_path,
@@ -19,6 +20,7 @@ from app.services.maintenance_service import (
     restore_database,
     restore_from_disk,
     reveal_in_file_manager,
+    update_check_status,
     write_backup_to_disk,
     write_license_token,
 )
@@ -69,6 +71,20 @@ def open_data_folder(
     launcher is unavailable (e.g. a headless environment).
     """
     folder = database_path(_engine(db)).parent
+    return {"opened": reveal_in_file_manager(folder), "path": str(folder)}
+
+
+@router.post("/open-backup-folder")
+def open_backup_folder(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Reveal the backup folder in the OS file manager.
+
+    Distinct from the data folder: with a configured ``backup_folder`` the two
+    differ, and the backup-saved toast must open where the file actually went.
+    """
+    folder = backups_dir(_engine(db))
     return {"opened": reveal_in_file_manager(folder), "path": str(folder)}
 
 
@@ -182,6 +198,20 @@ def delete_license(
 ):
     """Remove the stored update license; returns status."""
     return clear_license_token(_engine(db))
+
+
+@router.get("/update-status")
+def get_update_status(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Last auto-update check outcome, recorded by the desktop shell.
+
+    The shell writes ``update-check.json`` beside the database after every
+    check attempt (sanitized — never the license token); this surfaces it so
+    Settings can show whether updates are flowing instead of failing silently.
+    """
+    return update_check_status(_engine(db))
 
 
 @router.get("/support-bundle")

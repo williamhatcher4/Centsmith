@@ -6,7 +6,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.import_batch import ImportBatch
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.schemas.transaction import ImportBatchDeleteResult, ImportBatchOut
+from app.schemas.imports import ImportBatchDeleteResult, ImportBatchOut
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 

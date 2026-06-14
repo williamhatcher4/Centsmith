@@ -43,6 +43,12 @@ def _debug_log(data_dir: Path, message: str) -> None:
         pass
 
 
+# Release bundles are built with PyInstaller under this Python version (see
+# ci.yml / release.yml); local dev should match. A mismatch only warns — the
+# app still runs — but flags drift between dev and the shipped runtime.
+EXPECTED_PYTHON = (3, 12)
+
+
 def main() -> None:
     os.environ.setdefault("DESKTOP_MODE", "1")
     os.environ.setdefault("ENVIRONMENT", "production")
@@ -53,6 +59,12 @@ def main() -> None:
     os.environ["DESKTOP_AUTH_TOKEN"] = token
 
     data_dir = _user_data_dir()
+    if sys.version_info[:2] != EXPECTED_PYTHON:
+        _debug_log(
+            data_dir,
+            f"warning: running on Python {sys.version.split()[0]}; "
+            f"release builds use {EXPECTED_PYTHON[0]}.{EXPECTED_PYTHON[1]}",
+        )
     runtime_file = data_dir / "runtime.json"
     pid_file = data_dir / "backend.pid"
 

@@ -1,8 +1,9 @@
 ﻿import { api } from './client'
-import type { Classification, ClassificationFilter, ColumnMapping, DashboardSummary, ExpensedFilter, ImportPreview, ImportResult, SpendingSummary, Transaction, TransactionCreatePayload, TransactionPage } from '../types'
+import type { Classification, ClassificationFilter, ColumnMapping, DashboardSummary, ExpensedFilter, ImportPreview, ImportResult, SpendingSummary, Transaction, TransactionCreatePayload, TransactionPage, TransactionType } from '../types'
 
 export interface ImportOptions {
   chargesPositive?: boolean
+  dayFirst?: boolean
   mapping?: ColumnMapping
   profileId?: number
   cardId?: number
@@ -12,6 +13,7 @@ function importFormData(file: File, options: ImportOptions = {}): FormData {
   const body = new FormData()
   body.append('file', file)
   if (options.chargesPositive !== undefined) body.append('charges_positive', String(options.chargesPositive))
+  if (options.dayFirst !== undefined) body.append('day_first', String(options.dayFirst))
   if (options.mapping) body.append('column_mapping', JSON.stringify(options.mapping))
   if (options.profileId !== undefined) body.append('profile_id', String(options.profileId))
   if (options.cardId !== undefined) body.append('card_id', String(options.cardId))
@@ -20,6 +22,7 @@ function importFormData(file: File, options: ImportOptions = {}): FormData {
 
 export interface TransactionFilters {
   classification?: ClassificationFilter
+  transaction_type?: TransactionType | 'all'
   personal_category?: string
   expensed?: ExpensedFilter
   card_id?: number
@@ -29,12 +32,20 @@ export interface TransactionFilters {
   skip?: number
 }
 
+// Only these filters use 'all' as a "no filter" sentinel; other values equal to
+// the literal string 'all' (e.g. a user category named "all") are real values.
+const ALL_SENTINEL_KEYS = new Set(['classification', 'transaction_type', 'expensed'])
+
 function qs(filters: TransactionFilters) {
   const params = new URLSearchParams()
   Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== '' && value !== 'all') {
-      params.set(key, value === 'expensed' ? 'true' : value === 'unexpensed' ? 'false' : String(value))
+    if (value === undefined || value === '') return
+    if (value === 'all' && ALL_SENTINEL_KEYS.has(key)) return
+    if (key === 'expensed') {
+      params.set(key, value === 'expensed' ? 'true' : 'false')
+      return
     }
+    params.set(key, String(value))
   })
   const text = params.toString()
   return text ? `?${text}` : ''
@@ -42,7 +53,8 @@ function qs(filters: TransactionFilters) {
 
 export const transactionsApi = {
   list: (filters: TransactionFilters = {}) => api.get<TransactionPage>(`/api/v1/transactions${qs(filters)}`),
-  update: (id: number, data: Partial<Pick<Transaction, 'classification' | 'personal_category' | 'description' | 'transaction_date' | 'expensed' | 'card_id'>>) => api.put<Transaction>(`/api/v1/transactions/${id}`, data),
+  // amount_cents/transaction_type are accepted only for manual rows (backend 400s otherwise).
+  update: (id: number, data: Partial<Pick<Transaction, 'classification' | 'personal_category' | 'description' | 'transaction_date' | 'expensed' | 'card_id' | 'amount_cents' | 'transaction_type'>>) => api.put<Transaction>(`/api/v1/transactions/${id}`, data),
   bulkAssignCard: (transactionIds: number[], cardId: number | null) =>
     api.post<{ updated: number }>('/api/v1/transactions/bulk-assign-card', { transaction_ids: transactionIds, card_id: cardId }),
   createManual: (data: TransactionCreatePayload) => api.post<Transaction>('/api/v1/transactions/manual', data),

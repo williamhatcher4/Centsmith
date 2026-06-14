@@ -6,13 +6,13 @@ import type { UserSettings } from '../types'
 import { ACCENTS, Button, Card, CardHeader, Field, IconButton, Input, PageHeader, SegmentedControl, Select, Skeleton, useTheme, type Theme } from '../components/ui'
 import { useToast } from '../components/ui/toast-context'
 import { cn } from '../utils/cn'
+import { invalidateAnalytics, invalidateLedger } from '../utils/queryInvalidation'
 import { SYSTEM_CATEGORIES } from '../hooks/useCategories'
 import { HIDEABLE_NAV_LINKS } from '../constants/nav'
 import { DataDiagnosticsCard } from '../components/DataDiagnosticsCard'
 import { LicenseUpdatesCard } from '../components/LicenseUpdatesCard'
 import { licenseApi } from '../api/license'
 
-const SYSTEM_SET = new Set<string>(SYSTEM_CATEGORIES)
 
 interface CategoryRowProps {
   name: string
@@ -203,6 +203,11 @@ export function SettingsPage() {
   })
 
   const categories = useMemo(() => settings?.personal_categories ?? [], [settings?.personal_categories])
+  // Server-provided business rule (P1.4); the hardcoded list is only a fallback.
+  const systemSet = useMemo(
+    () => new Set<string>(settings?.system_categories ?? SYSTEM_CATEGORIES),
+    [settings?.system_categories],
+  )
 
   const updateMutation = useMutation({
     mutationFn: ({ payload, opts }: { payload: UserSettings; opts?: UpdateSettingsOptions }) =>
@@ -210,10 +215,8 @@ export function SettingsPage() {
     onSuccess: (next) => {
       qc.setQueryData(['settings'], next)
       qc.invalidateQueries({ queryKey: ['settings', 'category-usage'] })
-      qc.invalidateQueries({ queryKey: ['transactions'] })
-      qc.invalidateQueries({ queryKey: ['spending'] })
-      qc.invalidateQueries({ queryKey: ['income'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      invalidateLedger(qc)
+      invalidateAnalytics(qc)
     },
   })
 
@@ -413,7 +416,7 @@ export function SettingsPage() {
                 key={name}
                 name={name}
                 usageCount={usage[name] ?? 0}
-                isSystem={SYSTEM_SET.has(name)}
+                isSystem={systemSet.has(name)}
                 busy={updateMutation.isPending || usageLoading}
                 onRename={(newName) => renameCategory(name, newName)}
                 onDelete={() => openDelete(name)}

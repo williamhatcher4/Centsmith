@@ -1,0 +1,3619 @@
+{
+  "components": {
+    "schemas": {
+      "Body_confirm_checking_import_api_v1_transactions_import_checking_confirm_post": {
+        "properties": {
+          "column_mapping": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Mapping"
+          },
+          "day_first": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day First"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_confirm_checking_import_api_v1_transactions_import_checking_confirm_post",
+        "type": "object"
+      },
+      "Body_confirm_import_api_v1_transactions_import_confirm_post": {
+        "properties": {
+          "card_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Id"
+          },
+          "charges_positive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Charges Positive"
+          },
+          "column_mapping": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Mapping"
+          },
+          "day_first": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day First"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_confirm_import_api_v1_transactions_import_confirm_post",
+        "type": "object"
+      },
+      "Body_login_api_v1_auth_login_post": {
+        "properties": {
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_login_api_v1_auth_login_post",
+        "type": "object"
+      },
+      "Body_preview_checking_import_api_v1_transactions_import_checking_preview_post": {
+        "properties": {
+          "column_mapping": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Mapping"
+          },
+          "day_first": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day First"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_checking_import_api_v1_transactions_import_checking_preview_post",
+        "type": "object"
+      },
+      "Body_preview_import_api_v1_transactions_import_preview_post": {
+        "properties": {
+          "charges_positive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Charges Positive"
+          },
+          "column_mapping": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Mapping"
+          },
+          "day_first": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day First"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_import_api_v1_transactions_import_preview_post",
+        "type": "object"
+      },
+      "Body_restore_backup_api_v1_maintenance_restore_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_restore_backup_api_v1_maintenance_restore_post",
+        "type": "object"
+      },
+      "BulkAssignCardRequest": {
+        "properties": {
+          "card_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Id"
+          },
+          "transaction_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Transaction Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transaction_ids"
+        ],
+        "title": "BulkAssignCardRequest",
+        "type": "object"
+      },
+      "BulkAssignCardResult": {
+        "properties": {
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated"
+        ],
+        "title": "BulkAssignCardResult",
+        "type": "object"
+      },
+      "BulkCategorizeRequest": {
+        "properties": {
+          "personal_category": {
+            "title": "Personal Category",
+            "type": "string"
+          },
+          "transaction_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Transaction Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transaction_ids",
+          "personal_category"
+        ],
+        "title": "BulkCategorizeRequest",
+        "type": "object"
+      },
+      "BulkCategorizeResult": {
+        "properties": {
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated"
+        ],
+        "title": "BulkCategorizeResult",
+        "type": "object"
+      },
+      "BulkClassifyRequest": {
+        "properties": {
+          "classification": {
+            "enum": [
+              "personal",
+              "work"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "transaction_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Transaction Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transaction_ids",
+          "classification"
+        ],
+        "title": "BulkClassifyRequest",
+        "type": "object"
+      },
+      "BulkClassifyResult": {
+        "properties": {
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated"
+        ],
+        "title": "BulkClassifyResult",
+        "type": "object"
+      },
+      "CardCreate": {
+        "properties": {
+          "last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last4"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "statement_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement Day"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CardCreate",
+        "type": "object"
+      },
+      "CardOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last4"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "statement_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement Day"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "last4",
+          "statement_day"
+        ],
+        "title": "CardOut",
+        "type": "object"
+      },
+      "CardUpdate": {
+        "properties": {
+          "last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last4"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "statement_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement Day"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CardUpdate",
+        "type": "object"
+      },
+      "DashboardMonth": {
+        "properties": {
+          "income_cents": {
+            "default": 0,
+            "title": "Income Cents",
+            "type": "integer"
+          },
+          "month": {
+            "title": "Month",
+            "type": "string"
+          },
+          "personal_cents": {
+            "title": "Personal Cents",
+            "type": "integer"
+          },
+          "reimbursement_cents": {
+            "default": 0,
+            "title": "Reimbursement Cents",
+            "type": "integer"
+          },
+          "work_cents": {
+            "title": "Work Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "month",
+          "personal_cents",
+          "work_cents"
+        ],
+        "title": "DashboardMonth",
+        "type": "object"
+      },
+      "DashboardSummary": {
+        "properties": {
+          "income_total_cents": {
+            "default": 0,
+            "title": "Income Total Cents",
+            "type": "integer"
+          },
+          "latest_month": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Month"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardMonth"
+            },
+            "title": "Months",
+            "type": "array"
+          },
+          "personal_total_cents": {
+            "title": "Personal Total Cents",
+            "type": "integer"
+          },
+          "reimbursement_total_cents": {
+            "default": 0,
+            "title": "Reimbursement Total Cents",
+            "type": "integer"
+          },
+          "top_merchants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MerchantSpend"
+            },
+            "title": "Top Merchants",
+            "type": "array"
+          },
+          "uncategorized_income_cents": {
+            "default": 0,
+            "title": "Uncategorized Income Cents",
+            "type": "integer"
+          },
+          "uncategorized_income_count": {
+            "default": 0,
+            "title": "Uncategorized Income Count",
+            "type": "integer"
+          },
+          "unexpensed_work_cents": {
+            "default": 0,
+            "title": "Unexpensed Work Cents",
+            "type": "integer"
+          },
+          "unexpensed_work_count": {
+            "default": 0,
+            "title": "Unexpensed Work Count",
+            "type": "integer"
+          },
+          "unsorted_count": {
+            "title": "Unsorted Count",
+            "type": "integer"
+          },
+          "work_total_cents": {
+            "title": "Work Total Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "personal_total_cents",
+          "work_total_cents",
+          "unsorted_count",
+          "latest_month",
+          "months"
+        ],
+        "title": "DashboardSummary",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ImportBatchDeleteResult": {
+        "properties": {
+          "categorized_rows": {
+            "title": "Categorized Rows",
+            "type": "integer"
+          },
+          "classified_rows": {
+            "title": "Classified Rows",
+            "type": "integer"
+          },
+          "removed_rows": {
+            "title": "Removed Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "removed_rows",
+          "classified_rows",
+          "categorized_rows"
+        ],
+        "title": "ImportBatchDeleteResult",
+        "type": "object"
+      },
+      "ImportBatchOut": {
+        "properties": {
+          "created_by_action": {
+            "title": "Created By Action",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "imported_at": {
+            "format": "date-time",
+            "title": "Imported At",
+            "type": "string"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "statement_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement Format"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "statement_format",
+          "imported_at",
+          "row_count",
+          "created_by_action"
+        ],
+        "title": "ImportBatchOut",
+        "type": "object"
+      },
+      "ImportPreview": {
+        "properties": {
+          "amount_sign_adjustable": {
+            "default": false,
+            "title": "Amount Sign Adjustable",
+            "type": "boolean"
+          },
+          "available_columns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Available Columns",
+            "type": "array"
+          },
+          "charges_positive": {
+            "default": false,
+            "title": "Charges Positive",
+            "type": "boolean"
+          },
+          "date_convention_adjustable": {
+            "default": false,
+            "title": "Date Convention Adjustable",
+            "type": "boolean"
+          },
+          "day_first": {
+            "default": false,
+            "title": "Day First",
+            "type": "boolean"
+          },
+          "detected_columns": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "default": {},
+            "title": "Detected Columns",
+            "type": "object"
+          },
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "ignored_credits": {
+            "title": "Ignored Credits",
+            "type": "integer"
+          },
+          "mapping_required": {
+            "default": false,
+            "title": "Mapping Required",
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ImportPreviewRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "sample_rows": {
+            "default": [],
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Sample Rows",
+            "type": "array"
+          },
+          "skipped_errors": {
+            "default": 0,
+            "title": "Skipped Errors",
+            "type": "integer"
+          },
+          "skipped_rows": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SkippedRowOut"
+            },
+            "title": "Skipped Rows",
+            "type": "array"
+          },
+          "statement_format": {
+            "title": "Statement Format",
+            "type": "string"
+          },
+          "to_import": {
+            "title": "To Import",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows",
+          "total",
+          "duplicates",
+          "ignored_credits",
+          "to_import",
+          "statement_format"
+        ],
+        "title": "ImportPreview",
+        "type": "object"
+      },
+      "ImportPreviewRow": {
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "is_duplicate": {
+            "title": "Is Duplicate",
+            "type": "boolean"
+          },
+          "is_ignored_credit": {
+            "default": false,
+            "title": "Is Ignored Credit",
+            "type": "boolean"
+          },
+          "row_number": {
+            "title": "Row Number",
+            "type": "integer"
+          },
+          "transaction_type": {
+            "enum": [
+              "debit",
+              "credit"
+            ],
+            "title": "Transaction Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "row_number",
+          "date",
+          "description",
+          "amount_cents",
+          "transaction_type",
+          "is_duplicate"
+        ],
+        "title": "ImportPreviewRow",
+        "type": "object"
+      },
+      "ImportProfileCreate": {
+        "properties": {
+          "amount_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Column"
+          },
+          "amount_convention": {
+            "default": "signed",
+            "title": "Amount Convention",
+            "type": "string"
+          },
+          "credit_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credit Column"
+          },
+          "date_column": {
+            "title": "Date Column",
+            "type": "integer"
+          },
+          "date_convention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Convention"
+          },
+          "debit_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debit Column"
+          },
+          "description_column": {
+            "title": "Description Column",
+            "type": "integer"
+          },
+          "ignored_payment_patterns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Ignored Payment Patterns",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_type": {
+            "default": "card",
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "date_column",
+          "description_column"
+        ],
+        "title": "ImportProfileCreate",
+        "type": "object"
+      },
+      "ImportProfileOut": {
+        "properties": {
+          "amount_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Column"
+          },
+          "amount_convention": {
+            "title": "Amount Convention",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "credit_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credit Column"
+          },
+          "date_column": {
+            "title": "Date Column",
+            "type": "integer"
+          },
+          "date_convention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Convention"
+          },
+          "debit_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debit Column"
+          },
+          "description_column": {
+            "title": "Description Column",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "ignored_payment_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ignored Payment Patterns",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source_type",
+          "date_column",
+          "description_column",
+          "amount_column",
+          "debit_column",
+          "credit_column",
+          "amount_convention",
+          "date_convention",
+          "ignored_payment_patterns",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ImportProfileOut",
+        "type": "object"
+      },
+      "ImportProfileUpdate": {
+        "properties": {
+          "amount_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Column"
+          },
+          "amount_convention": {
+            "default": "signed",
+            "title": "Amount Convention",
+            "type": "string"
+          },
+          "credit_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credit Column"
+          },
+          "date_column": {
+            "title": "Date Column",
+            "type": "integer"
+          },
+          "date_convention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Convention"
+          },
+          "debit_column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debit Column"
+          },
+          "description_column": {
+            "title": "Description Column",
+            "type": "integer"
+          },
+          "ignored_payment_patterns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Ignored Payment Patterns",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_type": {
+            "default": "card",
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "date_column",
+          "description_column"
+        ],
+        "title": "ImportProfileUpdate",
+        "type": "object"
+      },
+      "ImportResult": {
+        "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "ignored_credits": {
+            "title": "Ignored Credits",
+            "type": "integer"
+          },
+          "imported": {
+            "title": "Imported",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "skipped_errors": {
+            "default": 0,
+            "title": "Skipped Errors",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "imported",
+          "skipped",
+          "ignored_credits"
+        ],
+        "title": "ImportResult",
+        "type": "object"
+      },
+      "LicenseTokenRequest": {
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "LicenseTokenRequest",
+        "type": "object"
+      },
+      "MerchantSpend": {
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "amount_cents",
+          "count"
+        ],
+        "title": "MerchantSpend",
+        "type": "object"
+      },
+      "RestoreFromDiskRequest": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RestoreFromDiskRequest",
+        "type": "object"
+      },
+      "SkippedRowOut": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "raw_amount": {
+            "title": "Raw Amount",
+            "type": "string"
+          },
+          "raw_date": {
+            "title": "Raw Date",
+            "type": "string"
+          },
+          "raw_description": {
+            "title": "Raw Description",
+            "type": "string"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "row_number": {
+            "title": "Row Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row_number",
+          "raw_date",
+          "raw_amount",
+          "raw_description",
+          "reason_code",
+          "message"
+        ],
+        "title": "SkippedRowOut",
+        "type": "object"
+      },
+      "SpendingByCategory": {
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "category_name": {
+            "title": "Category Name",
+            "type": "string"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "category_name",
+          "amount_cents",
+          "percent"
+        ],
+        "title": "SpendingByCategory",
+        "type": "object"
+      },
+      "SpendingPoint": {
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "by_category": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpendingByCategory"
+            },
+            "title": "By Category",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "amount_cents"
+        ],
+        "title": "SpendingPoint",
+        "type": "object"
+      },
+      "SpendingSummary": {
+        "properties": {
+          "average_per_month_cents": {
+            "title": "Average Per Month Cents",
+            "type": "integer"
+          },
+          "by_category": {
+            "items": {
+              "$ref": "#/components/schemas/SpendingByCategory"
+            },
+            "title": "By Category",
+            "type": "array"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/SpendingPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "total_cents": {
+            "title": "Total Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_cents",
+          "average_per_month_cents",
+          "points",
+          "by_category"
+        ],
+        "title": "SpendingSummary",
+        "type": "object"
+      },
+      "StatementSummary": {
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "integer"
+          },
+          "charge_count": {
+            "title": "Charge Count",
+            "type": "integer"
+          },
+          "charges_cents": {
+            "title": "Charges Cents",
+            "type": "integer"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "net_cents": {
+            "title": "Net Cents",
+            "type": "integer"
+          },
+          "payment_count": {
+            "title": "Payment Count",
+            "type": "integer"
+          },
+          "payments_cents": {
+            "title": "Payments Cents",
+            "type": "integer"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "start_date",
+          "end_date",
+          "charges_cents",
+          "payments_cents",
+          "net_cents",
+          "charge_count",
+          "payment_count"
+        ],
+        "title": "StatementSummary",
+        "type": "object"
+      },
+      "TransactionCreate": {
+        "properties": {
+          "amount_cents": {
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "enum": [
+                  "personal",
+                  "work"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "expensed": {
+            "default": false,
+            "title": "Expensed",
+            "type": "boolean"
+          },
+          "personal_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Category"
+          },
+          "transaction_date": {
+            "format": "date",
+            "title": "Transaction Date",
+            "type": "string"
+          },
+          "transaction_type": {
+            "enum": [
+              "debit",
+              "credit"
+            ],
+            "title": "Transaction Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transaction_date",
+          "description",
+          "amount_cents",
+          "transaction_type"
+        ],
+        "title": "TransactionCreate",
+        "type": "object"
+      },
+      "TransactionOut": {
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "card_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Id"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "enum": [
+                  "personal",
+                  "work"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "expensed": {
+            "title": "Expensed",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "imported_at": {
+            "format": "date-time",
+            "title": "Imported At",
+            "type": "string"
+          },
+          "is_manual": {
+            "title": "Is Manual",
+            "type": "boolean"
+          },
+          "personal_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Category"
+          },
+          "statement_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement Format"
+          },
+          "transaction_date": {
+            "format": "date",
+            "title": "Transaction Date",
+            "type": "string"
+          },
+          "transaction_type": {
+            "enum": [
+              "debit",
+              "credit"
+            ],
+            "title": "Transaction Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "transaction_date",
+          "description",
+          "amount_cents",
+          "transaction_type",
+          "classification",
+          "personal_category",
+          "expensed",
+          "is_manual",
+          "statement_format",
+          "card_id",
+          "imported_at"
+        ],
+        "title": "TransactionOut",
+        "type": "object"
+      },
+      "TransactionPage": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next_skip": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Skip"
+          },
+          "skip": {
+            "title": "Skip",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "skip",
+          "limit",
+          "has_more"
+        ],
+        "title": "TransactionPage",
+        "type": "object"
+      },
+      "TransactionUpdate": {
+        "properties": {
+          "amount_cents": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Cents"
+          },
+          "card_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Id"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "enum": [
+                  "personal",
+                  "work"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expensed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expensed"
+          },
+          "personal_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Category"
+          },
+          "transaction_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Date"
+          },
+          "transaction_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "debit",
+                  "credit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Type"
+          }
+        },
+        "title": "TransactionUpdate",
+        "type": "object"
+      },
+      "UserOut": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "display_name"
+        ],
+        "title": "UserOut",
+        "type": "object"
+      },
+      "UserSettingsOut": {
+        "properties": {
+          "backup_folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Folder"
+          },
+          "credit_only_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Credit Only Categories",
+            "type": "array"
+          },
+          "hidden_pages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hidden Pages",
+            "type": "array"
+          },
+          "personal_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Personal Categories",
+            "type": "array"
+          },
+          "system_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "System Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "personal_categories",
+          "hidden_pages"
+        ],
+        "title": "UserSettingsOut",
+        "type": "object"
+      },
+      "UserSettingsUpdate": {
+        "properties": {
+          "backup_folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Folder"
+          },
+          "hidden_pages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hidden Pages",
+            "type": "array"
+          },
+          "personal_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Personal Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "personal_categories",
+          "hidden_pages"
+        ],
+        "title": "UserSettingsUpdate",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_login_api_v1_auth_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/cards": {
+      "get": {
+        "operationId": "list_cards_api_v1_cards_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CardOut"
+                  },
+                  "title": "Response List Cards Api V1 Cards Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Cards",
+        "tags": [
+          "cards"
+        ]
+      },
+      "post": {
+        "operationId": "create_card_api_v1_cards_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Card",
+        "tags": [
+          "cards"
+        ]
+      }
+    },
+    "/api/v1/cards/{card_id}": {
+      "delete": {
+        "operationId": "delete_card_api_v1_cards__card_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "title": "Card Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Card",
+        "tags": [
+          "cards"
+        ]
+      },
+      "put": {
+        "operationId": "update_card_api_v1_cards__card_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "title": "Card Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Card",
+        "tags": [
+          "cards"
+        ]
+      }
+    },
+    "/api/v1/cards/{card_id}/statement": {
+      "get": {
+        "operationId": "card_statement_api_v1_cards__card_id__statement_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "title": "Card Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Start Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "End Date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Card Statement",
+        "tags": [
+          "cards"
+        ]
+      }
+    },
+    "/api/v1/import-profiles": {
+      "get": {
+        "operationId": "list_import_profiles_api_v1_import_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImportProfileOut"
+                  },
+                  "title": "Response List Import Profiles Api V1 Import Profiles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Import Profiles",
+        "tags": [
+          "import-profiles"
+        ]
+      },
+      "post": {
+        "operationId": "create_import_profile_api_v1_import_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportProfileCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Import Profile",
+        "tags": [
+          "import-profiles"
+        ]
+      }
+    },
+    "/api/v1/import-profiles/{profile_id}": {
+      "delete": {
+        "operationId": "delete_import_profile_api_v1_import_profiles__profile_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Import Profile",
+        "tags": [
+          "import-profiles"
+        ]
+      },
+      "put": {
+        "operationId": "update_import_profile_api_v1_import_profiles__profile_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Import Profile",
+        "tags": [
+          "import-profiles"
+        ]
+      }
+    },
+    "/api/v1/imports": {
+      "get": {
+        "operationId": "list_import_batches_api_v1_imports_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImportBatchOut"
+                  },
+                  "title": "Response List Import Batches Api V1 Imports Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Import Batches",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/{batch_id}": {
+      "delete": {
+        "operationId": "delete_import_batch_api_v1_imports__batch_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportBatchDeleteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Import Batch",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/maintenance/backup": {
+      "get": {
+        "operationId": "download_backup_api_v1_maintenance_backup_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Download Backup",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/backup-to-disk": {
+      "post": {
+        "description": "Write a backup file locally and return its path (desktop save fallback).",
+        "operationId": "backup_to_disk_api_v1_maintenance_backup_to_disk_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Backup To Disk",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/backups": {
+      "get": {
+        "description": "Backups saved on disk (newest first) for one-click in-app restore.",
+        "operationId": "list_backups_api_v1_maintenance_backups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Backups",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/data-location": {
+      "get": {
+        "description": "Where the SQLite database lives \u2014 shown when the OS folder can't be opened.",
+        "operationId": "data_location_api_v1_maintenance_data_location_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Data Location",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/license": {
+      "delete": {
+        "description": "Remove the stored update license; returns status.",
+        "operationId": "delete_license_api_v1_maintenance_license_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete License",
+        "tags": [
+          "maintenance"
+        ]
+      },
+      "get": {
+        "description": "Whether an update license is stored, with a masked hint (never the token).\n\nLicensing moved off Tauri IPC to the local backend: the desktop webview is\nserved from a remote origin where ``window.__TAURI__`` invoke is unreliable,\nso the token is read/written here and lands beside the database \u2014 the same\nfile the Tauri updater reads as a bearer header.",
+        "operationId": "get_license_api_v1_maintenance_license_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get License",
+        "tags": [
+          "maintenance"
+        ]
+      },
+      "post": {
+        "description": "Store the pasted update license (blank clears it); returns masked status.",
+        "operationId": "set_license_api_v1_maintenance_license_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LicenseTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set License",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/open-backup-folder": {
+      "post": {
+        "description": "Reveal the backup folder in the OS file manager.\n\nDistinct from the data folder: with a configured ``backup_folder`` the two\ndiffer, and the backup-saved toast must open where the file actually went.",
+        "operationId": "open_backup_folder_api_v1_maintenance_open_backup_folder_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Open Backup Folder",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/open-data-folder": {
+      "post": {
+        "description": "Reveal the data folder in the OS file manager (backend runs locally).\n\nReturns ``opened`` so the UI can fall back to displaying ``path`` if the\nlauncher is unavailable (e.g. a headless environment).",
+        "operationId": "open_data_folder_api_v1_maintenance_open_data_folder_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Open Data Folder",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/restore": {
+      "post": {
+        "operationId": "restore_backup_api_v1_maintenance_restore_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_restore_backup_api_v1_maintenance_restore_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Backup",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/restore-from-disk": {
+      "post": {
+        "operationId": "restore_backup_from_disk_api_v1_maintenance_restore_from_disk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreFromDiskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Backup From Disk",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/support-bundle": {
+      "get": {
+        "operationId": "download_support_bundle_api_v1_maintenance_support_bundle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Download Support Bundle",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/update-status": {
+      "get": {
+        "description": "Last auto-update check outcome, recorded by the desktop shell.\n\nThe shell writes ``update-check.json`` beside the database after every\ncheck attempt (sanitized \u2014 never the license token); this surfaces it so\nSettings can show whether updates are flowing instead of failing silently.",
+        "operationId": "get_update_status_api_v1_maintenance_update_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Update Status",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/settings": {
+      "get": {
+        "operationId": "get_settings_api_v1_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "operationId": "update_settings_api_v1_settings_put",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "on_delete",
+            "required": false,
+            "schema": {
+              "default": "reject",
+              "enum": [
+                "reject",
+                "relabel"
+              ],
+              "title": "On Delete",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "relabel_target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relabel Target"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/category-usage": {
+      "get": {
+        "operationId": "get_category_usage_api_v1_settings_category_usage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Get Category Usage Api V1 Settings Category Usage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Category Usage",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/transactions": {
+      "get": {
+        "operationId": "list_transactions_api_v1_transactions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "classification",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "personal",
+                    "work",
+                    "unsorted"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Classification"
+            }
+          },
+          {
+            "in": "query",
+            "name": "transaction_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "debit",
+                    "credit"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transaction Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "personal_category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Personal Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expensed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expensed"
+            }
+          },
+          {
+            "in": "query",
+            "name": "card_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Card Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Transactions",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/bulk-assign-card": {
+      "post": {
+        "operationId": "bulk_assign_card_api_v1_transactions_bulk_assign_card_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkAssignCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkAssignCardResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Assign Card",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/bulk-categorize-personal": {
+      "post": {
+        "operationId": "bulk_categorize_personal_api_v1_transactions_bulk_categorize_personal_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkCategorizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkCategorizeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Categorize Personal",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/bulk-classify": {
+      "post": {
+        "operationId": "bulk_classify_api_v1_transactions_bulk_classify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkClassifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkClassifyResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Classify",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/dashboard": {
+      "get": {
+        "operationId": "dashboard_api_v1_transactions_dashboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 36,
+              "minimum": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dashboard",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/export/{classification}": {
+      "get": {
+        "operationId": "export_transactions_api_v1_transactions_export__classification__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "classification",
+            "required": true,
+            "schema": {
+              "enum": [
+                "personal",
+                "work"
+              ],
+              "title": "Classification",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Transactions",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/import/checking/confirm": {
+      "post": {
+        "operationId": "confirm_checking_import_api_v1_transactions_import_checking_confirm_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_confirm_checking_import_api_v1_transactions_import_checking_confirm_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Checking Import",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/import/checking/preview": {
+      "post": {
+        "operationId": "preview_checking_import_api_v1_transactions_import_checking_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_checking_import_api_v1_transactions_import_checking_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Checking Import",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/import/confirm": {
+      "post": {
+        "operationId": "confirm_import_api_v1_transactions_import_confirm_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_confirm_import_api_v1_transactions_import_confirm_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Import",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/import/preview": {
+      "post": {
+        "operationId": "preview_import_api_v1_transactions_import_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_import_api_v1_transactions_import_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Import",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/income/personal": {
+      "get": {
+        "operationId": "personal_income_api_v1_transactions_income_personal_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 36,
+              "minimum": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Personal Income",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/manual": {
+      "post": {
+        "operationId": "create_manual_transaction_api_v1_transactions_manual_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Manual Transaction",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/spending/personal": {
+      "get": {
+        "operationId": "personal_spending_api_v1_transactions_spending_personal_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 36,
+              "minimum": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Personal Spending",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/api/v1/transactions/{tx_id}": {
+      "delete": {
+        "operationId": "delete_transaction_api_v1_transactions__tx_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tx_id",
+            "required": true,
+            "schema": {
+              "title": "Tx Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Transaction",
+        "tags": [
+          "transactions"
+        ]
+      },
+      "put": {
+        "operationId": "update_transaction_api_v1_transactions__tx_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tx_id",
+            "required": true,
+            "schema": {
+              "title": "Tx Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Transaction",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}

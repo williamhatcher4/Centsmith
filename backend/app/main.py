@@ -14,7 +14,10 @@ from app.routers import cards as cards_router
 from app.routers import import_profiles as import_profiles_router
 from app.routers import imports as imports_router
 from app.routers import maintenance as maintenance_router
+from app.routers import reports as reports_router
 from app.routers import settings as settings_router
+from app.routers import statement_imports as statement_imports_router
+from app.routers import transaction_exports as transaction_exports_router
 
 
 def _frontend_dist_dir() -> Path:
@@ -47,6 +50,9 @@ app.include_router(imports_router.router, prefix="/api/v1")
 app.include_router(import_profiles_router.router, prefix="/api/v1")
 app.include_router(maintenance_router.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
+app.include_router(statement_imports_router.router, prefix="/api/v1")
+app.include_router(reports_router.router, prefix="/api/v1")
+app.include_router(transaction_exports_router.router, prefix="/api/v1")
 
 
 @app.get("/health")

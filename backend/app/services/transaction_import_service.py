@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.import_batch import ImportBatch
 from app.models.transaction import Transaction
-from app.schemas.transaction import ImportPreview, ImportPreviewRow, ImportResult, SkippedRowOut
+from app.schemas.imports import ImportPreview, ImportPreviewRow, ImportResult, SkippedRowOut
 from app.services.statement_import_service import (
     ColumnMapping,
     ParsedRow,
@@ -113,13 +113,16 @@ def _parse(
     source: ImportSource,
     charges_positive: Optional[bool] = None,
     mapping: Optional[ColumnMapping] = None,
+    day_first: Optional[bool] = None,
 ) -> StatementParseResult:
     default_name = "checking.csv" if source == "checking" else "statement.csv"
     if mapping is not None:
-        return parse_statement_with_mapping(filename or default_name, raw, source, mapping)
+        return parse_statement_with_mapping(filename or default_name, raw, source, mapping, day_first)
     if source == "checking":
-        return parse_statement_ex(filename or default_name, raw, source="checking", charges_positive=charges_positive)
-    return parse_statement_ex(filename or default_name, raw, charges_positive=charges_positive)
+        return parse_statement_ex(
+            filename or default_name, raw, source="checking", charges_positive=charges_positive, day_first=day_first
+        )
+    return parse_statement_ex(filename or default_name, raw, charges_positive=charges_positive, day_first=day_first)
 
 
 def preview_import(
@@ -130,8 +133,9 @@ def preview_import(
     charges_positive: Optional[bool] = None,
     mapping: Optional[ColumnMapping] = None,
     ignored_patterns: Optional[list[str]] = None,
+    day_first: Optional[bool] = None,
 ) -> ImportPreview:
-    result = _parse(raw, filename, source, charges_positive, mapping)
+    result = _parse(raw, filename, source, charges_positive, mapping, day_first)
     if result.columns is not None and result.columns.mapping_required:
         return _mapping_required_preview(result)
     rows = result.rows
@@ -172,6 +176,8 @@ def preview_import(
         skipped_errors=result.skipped_errors,
         amount_sign_adjustable=result.amount_sign_adjustable,
         charges_positive=result.charges_positive,
+        date_convention_adjustable=result.date_convention_adjustable,
+        day_first=result.day_first,
         skipped_rows=_skipped_out(result),
     )
 
@@ -185,8 +191,9 @@ def confirm_import(
     mapping: Optional[ColumnMapping] = None,
     ignored_patterns: Optional[list[str]] = None,
     card_id: Optional[int] = None,
+    day_first: Optional[bool] = None,
 ) -> ImportResult:
-    result = _parse(raw, filename, source, charges_positive, mapping)
+    result = _parse(raw, filename, source, charges_positive, mapping, day_first)
     if result.columns is not None and result.columns.mapping_required:
         raise ValueError("This file needs a column mapping before it can be imported.")
     rows = result.rows

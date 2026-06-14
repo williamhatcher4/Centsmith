@@ -1,0 +1,18 @@
+{
+  "app_version": "0.1.0",
+  "head_revision": "20260611_0009",
+  "signed_sums": {
+    "credit|personal": 404500,
+    "debit|None": -999,
+    "debit|personal": -33000,
+    "debit|work": -17000
+  },
+  "table_counts": {
+    "cards": 1,
+    "import_batches": 1,
+    "import_profiles": 1,
+    "transactions": 14,
+    "user_settings": 1,
+    "users": 1
+  }
+}

@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator, model_validator
 
-from app.models.import_profile import AMOUNT_CONVENTIONS, PROFILE_SOURCE_TYPES
+from app.models.import_profile import AMOUNT_CONVENTIONS, DATE_CONVENTIONS, PROFILE_SOURCE_TYPES
 
 
 class ColumnMappingIn(BaseModel):
@@ -20,6 +20,7 @@ class ColumnMappingIn(BaseModel):
     debit_column: Optional[int] = None
     credit_column: Optional[int] = None
     amount_convention: str = "signed"
+    date_convention: Optional[str] = None
 
     @field_validator("date_column", "description_column", "amount_column", "debit_column", "credit_column")
     @classmethod
@@ -33,6 +34,13 @@ class ColumnMappingIn(BaseModel):
     def known_convention(cls, value: str) -> str:
         if value not in AMOUNT_CONVENTIONS:
             raise ValueError(f"amount_convention must be one of {sorted(AMOUNT_CONVENTIONS)}")
+        return value
+
+    @field_validator("date_convention")
+    @classmethod
+    def known_date_convention(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in DATE_CONVENTIONS:
+            raise ValueError(f"date_convention must be one of {sorted(DATE_CONVENTIONS)}")
         return value
 
     @model_validator(mode="after")
@@ -51,6 +59,7 @@ class ImportProfileBase(BaseModel):
     debit_column: Optional[int] = None
     credit_column: Optional[int] = None
     amount_convention: str = "signed"
+    date_convention: Optional[str] = None
     ignored_payment_patterns: list[str] = []
 
     @field_validator("name")
@@ -75,6 +84,13 @@ class ImportProfileBase(BaseModel):
     def known_convention(cls, value: str) -> str:
         if value not in AMOUNT_CONVENTIONS:
             raise ValueError(f"amount_convention must be one of {sorted(AMOUNT_CONVENTIONS)}")
+        return value
+
+    @field_validator("date_convention")
+    @classmethod
+    def known_date_convention(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in DATE_CONVENTIONS:
+            raise ValueError(f"date_convention must be one of {sorted(DATE_CONVENTIONS)}")
         return value
 
     @model_validator(mode="after")
@@ -102,6 +118,7 @@ class ImportProfileOut(BaseModel):
     debit_column: Optional[int]
     credit_column: Optional[int]
     amount_convention: str
+    date_convention: Optional[str]
     ignored_payment_patterns: list[str]
     created_at: datetime
     updated_at: datetime

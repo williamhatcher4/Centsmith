@@ -2,6 +2,7 @@ import { Download, Trash2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { importsApi } from '../api/imports'
 import type { ImportBatch } from '../types'
+import { invalidateAnalytics, invalidateLedger } from '../utils/queryInvalidation'
 import { Badge, Button, Card, CardHeader, IconButton, PageHeader, useConfirm, useToast } from '../components/ui'
 
 function formatImportedAt(value: string): string {
@@ -28,11 +29,8 @@ function ImportsSection() {
   const deleteMutation = useMutation({
     mutationFn: (batch: ImportBatch) => importsApi.deleteBatch(batch.id),
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ['imports'] })
-      qc.invalidateQueries({ queryKey: ['transactions'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
-      qc.invalidateQueries({ queryKey: ['spending'] })
-      qc.invalidateQueries({ queryKey: ['income'] })
+      invalidateLedger(qc)
+      invalidateAnalytics(qc)
       toast.success(`Removed ${result.removed_rows} transaction${result.removed_rows === 1 ? '' : 's'}.`)
     },
     onError: (err: Error) => toast.error(err.message || 'Undo failed'),

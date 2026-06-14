@@ -5,6 +5,7 @@ import { transactionsApi } from '../api/transactions'
 import type { Transaction } from '../types'
 import { formatMoney } from '../utils/money'
 import { cn } from '../utils/cn'
+import { invalidateAnalytics, invalidateLedger } from '../utils/queryInvalidation'
 import { Button, Card, Empty, Field, Input, PageHeader, Select, Skeleton, StatCard } from '../components/ui'
 import { useCategories } from '../hooks/useCategories'
 
@@ -77,10 +78,8 @@ export function PersonalInboxPage() {
       })
       setSelectedIds(new Set())
       setBulkCategory('')
-      qc.invalidateQueries({ queryKey: ['transactions'] })
-      qc.invalidateQueries({ queryKey: ['spending'] })
-      qc.invalidateQueries({ queryKey: ['income'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      invalidateLedger(qc)
+      invalidateAnalytics(qc)
     },
     onError: (err, variables) => {
       setSavingIds((prev) => {

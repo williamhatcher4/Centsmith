@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, FolderOpen, Upload } from 'lucide-react'
 import { maintenanceApi } from '../api/maintenance'
-import { Button, Card, CardHeader } from './ui'
+import { settingsApi } from '../api/settings'
+import { Button, Card, CardHeader, Field, Input } from './ui'
 import { useConfirm } from './ui/confirm-context'
 import { useToast } from './ui/toast-context'
 
@@ -25,6 +26,35 @@ export function DataDiagnosticsCard() {
     queryKey: ['maintenance', 'backups'],
     queryFn: maintenanceApi.listBackups,
   })
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+
+  // null = untouched; the input falls back to the saved value while untouched.
+  const [folderDraft, setFolderDraft] = useState<string | null>(null)
+  const savedFolder = settings?.backup_folder ?? ''
+  const folderValue = folderDraft ?? savedFolder
+
+  const saveFolderMutation = useMutation({
+    mutationFn: (backup_folder: string | null) => {
+      if (!settings) return Promise.reject(new Error('Settings are still loading'))
+      return settingsApi.update({
+        personal_categories: settings.personal_categories,
+        hidden_pages: settings.hidden_pages,
+        backup_folder,
+      })
+    },
+    onSuccess: async (_, backup_folder) => {
+      await qc.invalidateQueries({ queryKey: ['settings'] })
+      await qc.invalidateQueries({ queryKey: ['maintenance', 'backups'] })
+      setFolderDraft(null)
+      toast.success(backup_folder ? `Backups will be saved to ${backup_folder}` : 'Backups will use the default folder')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  function saveFolder() {
+    const trimmed = folderValue.trim()
+    saveFolderMutation.mutate(trimmed ? trimmed : null)
+  }
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(label)
@@ -43,7 +73,7 @@ export function DataDiagnosticsCard() {
       if (path) {
         await qc.invalidateQueries({ queryKey: ['maintenance', 'backups'] })
         toast.success(`Backup saved to ${path}`, {
-          action: { label: 'Open folder', onClick: () => void maintenanceApi.openDataFolder() },
+          action: { label: 'Open folder', onClick: () => void maintenanceApi.openBackupFolder() },
         })
       } else {
         toast.success('Backup downloaded.')
@@ -103,6 +133,31 @@ export function DataDiagnosticsCard() {
         <Button variant="secondary" leftIcon={<FolderOpen className="size-4" />} onClick={openFolder} loading={busy === 'folder'}>
           Open data folder
         </Button>
+      </div>
+
+      <div className="mt-4">
+        <Field label="Backup folder" htmlFor="backup-folder" hint="Blank = default folder beside your data">
+          <div className="flex flex-wrap gap-2">
+            <Input
+              id="backup-folder"
+              className="min-w-0 flex-1"
+              value={folderValue}
+              onChange={(e) => setFolderDraft(e.target.value)}
+              placeholder="e.g. D:\Centsmith Backups"
+            />
+            <Button
+              variant="secondary"
+              onClick={saveFolder}
+              loading={saveFolderMutation.isPending}
+              disabled={!settings || folderValue.trim() === savedFolder.trim()}
+            >
+              Save folder
+            </Button>
+          </div>
+          <p className="mt-1.5 text-xs text-[var(--text-subtle)]">
+            Must be an existing folder. Choosing one on another drive keeps backups safe if this disk fails.
+          </p>
+        </Field>
       </div>
 
       {backups.length > 0 && (

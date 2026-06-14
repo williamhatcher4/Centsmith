@@ -89,4 +89,72 @@ describe('LicenseUpdatesCard', () => {
     // Read failures fall back to the no-license state (the card still renders).
     expect(await screen.findByText(/no license entered/i)).toBeInTheDocument()
   })
+
+  it('shows that no update check has run yet', async () => {
+    renderWithProviders(<LicenseUpdatesCard />)
+    expect(await screen.findByText(/no update check has run yet/i)).toBeInTheDocument()
+  })
+
+  it('shows a successful update check with a relative timestamp', async () => {
+    server.use(
+      http.get('/api/v1/maintenance/update-status', () =>
+        HttpResponse.json({
+          present: true,
+          checked_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+          result: 'ok-uptodate',
+          detail: '',
+        }),
+      ),
+    )
+    renderWithProviders(<LicenseUpdatesCard />)
+    expect(
+      await screen.findByText(/last update check: 5 minutes ago — up to date/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a failed update check with its detail', async () => {
+    server.use(
+      http.get('/api/v1/maintenance/update-status', () =>
+        HttpResponse.json({
+          present: true,
+          checked_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          result: 'error',
+          detail: 'could not reach update server',
+        }),
+      ),
+    )
+    renderWithProviders(<LicenseUpdatesCard />)
+    expect(
+      await screen.findByText(/last update check: 1 hour ago — failed: could not reach update server/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a skipped check when no license is stored', async () => {
+    server.use(
+      http.get('/api/v1/maintenance/update-status', () =>
+        HttpResponse.json({
+          present: true,
+          checked_at: new Date().toISOString(),
+          result: 'skipped-no-license',
+          detail: 'No license stored; update checks are disabled.',
+        }),
+      ),
+    )
+    renderWithProviders(<LicenseUpdatesCard />)
+    expect(
+      await screen.findByText(/last update check: just now — skipped \(no license\)/i),
+    ).toBeInTheDocument()
+  })
+
+  it('hides the update-check line when the status read fails', async () => {
+    server.use(
+      http.get('/api/v1/maintenance/update-status', () =>
+        HttpResponse.json({ detail: 'boom' }, { status: 500 }),
+      ),
+    )
+    renderWithProviders(<LicenseUpdatesCard />)
+    await screen.findByText(/no license entered/i)
+    expect(screen.queryByText(/last update check/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no update check has run yet/i)).not.toBeInTheDocument()
+  })
 })

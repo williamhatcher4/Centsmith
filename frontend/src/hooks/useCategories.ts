@@ -2,10 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { settingsApi } from '../api/settings'
 import type { TransactionType } from '../types'
 
+// Fallbacks while /settings is loading (or for older backends that don't send
+// the rule fields). The server response is the source of truth.
 export const SYSTEM_CATEGORIES = ['Income', 'Reimbursement', 'Transfer'] as const
 export const INCOME_ONLY_CATEGORIES = ['Income', 'Reimbursement'] as const
-const INCOME_ONLY_SET = new Set<string>(INCOME_ONLY_CATEGORIES)
-const SYSTEM_SET = new Set<string>(SYSTEM_CATEGORIES)
 
 const FALLBACK_CATEGORIES = [
   'Groceries', 'Dining', 'Transportation', 'Home', 'Health',
@@ -30,8 +30,10 @@ export function useCategories(): UseCategoriesResult {
   })
 
   const all = data?.personal_categories ?? FALLBACK_CATEGORIES
-  const incomeOnly = all.filter((c) => INCOME_ONLY_SET.has(c))
-  const spending = all.filter((c) => !INCOME_ONLY_SET.has(c))
+  const incomeOnlySet = new Set<string>(data?.credit_only_categories ?? INCOME_ONLY_CATEGORIES)
+  const systemSet = new Set<string>(data?.system_categories ?? SYSTEM_CATEGORIES)
+  const incomeOnly = all.filter((c) => incomeOnlySet.has(c))
+  const spending = all.filter((c) => !incomeOnlySet.has(c))
   const credit = [...incomeOnly, ...spending]
 
   return {
@@ -39,7 +41,7 @@ export function useCategories(): UseCategoriesResult {
     spending,
     credit,
     isLoading,
-    isSystem: (name: string) => SYSTEM_SET.has(name),
+    isSystem: (name: string) => systemSet.has(name),
     categoriesFor: (tx) => (tx.transaction_type === 'credit' ? credit : spending),
   }
 }

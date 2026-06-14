@@ -5,6 +5,7 @@ import { transactionsApi } from '../api/transactions'
 import type { Classification, Transaction } from '../types'
 import { formatMoney } from '../utils/money'
 import { cn } from '../utils/cn'
+import { invalidateAnalytics, invalidateLedger } from '../utils/queryInvalidation'
 import { Button, Card, Empty, Field, Input, PageHeader, Select, Skeleton, StatCard } from '../components/ui'
 
 function fmtDate(d: string) {
@@ -56,9 +57,8 @@ export function InboxPage() {
     onSuccess: () => {
       setSelectedIds(new Set())
       setBulkClass('')
-      qc.invalidateQueries({ queryKey: ['transactions'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
-      qc.invalidateQueries({ queryKey: ['spending'] })
+      invalidateLedger(qc)
+      invalidateAnalytics(qc)
     },
   })
 

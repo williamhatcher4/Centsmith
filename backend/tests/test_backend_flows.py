@@ -168,10 +168,11 @@ def test_desktop_bootstrap_serves_html_only_in_desktop_mode(client, monkeypatch)
     assert "Signing you in" in response.text
 
 
-def test_transaction_lists_show_debits_default_and_credits_in_unsorted(client, db_session):
+def test_default_transaction_list_shows_credits_and_debits(client, db_session):
+    """The unfiltered "All" view shows everything (maintainer decision 2026-06-09)."""
     debit = add_transaction(db_session, description="Coffee", amount_cents=425, transaction_type="debit")
     refund = add_transaction(db_session, description="Refund", amount_cents=425, transaction_type="credit")
-    add_transaction(
+    work = add_transaction(
         db_session,
         description="Client lunch",
         amount_cents=3200,
@@ -184,8 +185,7 @@ def test_transaction_lists_show_debits_default_and_credits_in_unsorted(client, d
     response = client.get("/api/v1/transactions", params={"limit": 1000})
     assert response.status_code == 200
     rows = response.json()["items"]
-    assert {row["id"] for row in rows} == {debit.id, debit.id + 2}
-    assert all(row["transaction_type"] == "debit" for row in rows)
+    assert {row["id"] for row in rows} == {debit.id, refund.id, work.id}
 
     response = client.get("/api/v1/transactions", params={"classification": "unsorted"})
     assert response.status_code == 200
@@ -194,6 +194,49 @@ def test_transaction_lists_show_debits_default_and_credits_in_unsorted(client, d
     dashboard = client.get("/api/v1/transactions/dashboard").json()
     assert dashboard["unsorted_count"] == 2
     assert dashboard["work_total_cents"] == 3200
+
+
+def test_transaction_type_filter_narrows_to_debits_or_credits(client, db_session):
+    debit = add_transaction(db_session, description="Coffee", amount_cents=425, transaction_type="debit")
+    refund = add_transaction(db_session, description="Refund", amount_cents=425, transaction_type="credit")
+
+    login(client)
+
+    debits = client.get("/api/v1/transactions", params={"transaction_type": "debit"})
+    assert debits.status_code == 200
+    assert {row["id"] for row in debits.json()["items"]} == {debit.id}
+
+    credits = client.get("/api/v1/transactions", params={"transaction_type": "credit"})
+    assert credits.status_code == 200
+    assert {row["id"] for row in credits.json()["items"]} == {refund.id}
+
+    assert client.get("/api/v1/transactions", params={"transaction_type": "refund"}).status_code == 422
+
+
+def test_category_named_all_filters_correctly(client, db_session):
+    """'all' is only a frontend sentinel — the API treats it as a literal category."""
+    target = add_transaction(
+        db_session,
+        description="Odd category",
+        amount_cents=1000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="all",
+    )
+    add_transaction(
+        db_session,
+        description="Other personal",
+        amount_cents=2000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Dining",
+    )
+
+    login(client)
+
+    response = client.get("/api/v1/transactions", params={"classification": "personal", "personal_category": "all"})
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()["items"]] == [target.id]
 
 
 def test_import_preview_and_confirm_ignore_card_payment_credits(client, db_session):
@@ -607,18 +650,30 @@ def test_preview_marks_only_overlapping_occurrence_as_duplicate(client):
     assert [row["is_duplicate"] for row in body["rows"]] == [True, False]
 
 
-def test_exports_include_only_debit_rows(client, db_session):
-    add_transaction(db_session, description="Dinner", amount_cents=5500, transaction_type="debit", classification="personal")
-    add_transaction(db_session, description="Refund", amount_cents=5500, transaction_type="credit", classification="personal")
+def test_exports_include_credits_with_positive_signed_amounts(client, db_session):
+    """Exports are the complete record — credits included (decision 2026-06-09)."""
+    add_transaction(db_session, description="Dinner", amount_cents=5500, transaction_type="debit", classification="personal", personal_category="Dining")
+    add_transaction(db_session, description="Paycheck", amount_cents=200000, transaction_type="credit", classification="personal", personal_category="Income")
+    add_transaction(db_session, description="Card refund", amount_cents=1500, transaction_type="credit", classification="personal")
     add_transaction(db_session, description="Supplies", amount_cents=1299, transaction_type="debit", classification="work")
+    add_transaction(db_session, description="Travel refund", amount_cents=4200, transaction_type="credit", classification="work")
+    # Transfers stay excluded from the personal export.
+    add_transaction(db_session, description="Move to savings", amount_cents=10000, transaction_type="debit", classification="personal", personal_category="Transfer")
 
     login(client)
 
-    response = client.get("/api/v1/transactions/export/personal")
-    assert response.status_code == 200
-    assert "Dinner" in response.text
-    assert "Refund" not in response.text
-    assert ",debit,-55.00" in response.text
+    personal = client.get("/api/v1/transactions/export/personal")
+    assert personal.status_code == 200
+    assert "Date,Description,Classification,Type,Amount,Category" in personal.text
+    assert "Dinner,personal,debit,-55.00,Dining" in personal.text
+    assert "Paycheck,personal,credit,2000.00,Income" in personal.text
+    assert "Card refund,personal,credit,15.00," in personal.text
+    assert "Move to savings" not in personal.text
+
+    work = client.get("/api/v1/transactions/export/work")
+    assert work.status_code == 200
+    assert "Supplies,work,debit,-12.99,no" in work.text
+    assert "Travel refund,work,credit,42.00,no" in work.text
 
 
 def test_work_transactions_can_be_marked_and_filtered_by_expensed(client, db_session):
@@ -1008,6 +1063,57 @@ def test_personal_income_window_matches_dashboard(client, db_session):
     assert income_12["total_cents"] == 310000
     income_24 = client.get("/api/v1/transactions/income/personal", params={"months": 24}).json()
     assert income_24["total_cents"] == 360000
+
+
+def test_personal_spending_window_matches_dashboard(client, db_session):
+    """Spending-page total covers the same calendar months as the dashboard.
+
+    Regression: with sparse personal spend the spending page used to take the
+    last N *personal-spend-bearing* months, reaching back to older spend the
+    dashboard's recent-N-calendar-month window excluded — at months=3 the
+    dashboard card showed $0 while the spending page showed the old purchase.
+    Same class as the income mismatch fixed 2026-06-06.
+    """
+    # One old personal purchase, then only work activity in recent months.
+    add_transaction(
+        db_session,
+        description="Groceries old",
+        amount_cents=5000,
+        transaction_type="debit",
+        classification="personal",
+        personal_category="Groceries",
+        transaction_date=date(2025, 1, 10),
+    )
+    work_months = {(2026, 4): 30000, (2026, 5): 20000, (2026, 6): 4000}
+    for (year, month), cents in work_months.items():
+        add_transaction(
+            db_session,
+            description=f"Client travel {year}-{month:02d}",
+            amount_cents=cents,
+            transaction_type="debit",
+            classification="work",
+            transaction_date=date(year, month, 5),
+        )
+
+    login(client)
+
+    # Activity months: 2025-01, 2026-04, 2026-05, 2026-06.
+    for window, expected_points in ((3, 3), (6, 4), (12, 4), (24, 4)):
+        spending = client.get("/api/v1/transactions/spending/personal", params={"months": window}).json()
+        dashboard = client.get("/api/v1/transactions/dashboard", params={"months": window}).json()
+        assert spending["total_cents"] == dashboard["personal_total_cents"], f"mismatch at months={window}"
+        # Every month in the window appears as a point, zero-filled when the
+        # month has no personal spend.
+        assert len(spending["points"]) == expected_points, f"point count at months={window}"
+
+    # The 3-month window holds only work activity, so both figures are $0; wider
+    # windows reach the 2025-01 purchase.
+    spending_3 = client.get("/api/v1/transactions/spending/personal", params={"months": 3}).json()
+    assert spending_3["total_cents"] == 0
+    assert [p["amount_cents"] for p in spending_3["points"]] == [0, 0, 0]
+    spending_24 = client.get("/api/v1/transactions/spending/personal", params={"months": 24}).json()
+    assert spending_24["total_cents"] == 5000
+    assert [p["amount_cents"] for p in spending_24["points"]] == [5000, 0, 0, 0]
 
 
 def test_checking_import_preview_keeps_credits(client):

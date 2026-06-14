@@ -23,12 +23,28 @@ describe('TransactionsPage', () => {
     await screen.findByText('Coffee shop')
     expect(screen.queryByLabelText('Expensed')).not.toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Type'), 'work')
+    await user.selectOptions(screen.getByLabelText('Sort'), 'work')
     expect(await screen.findByLabelText('Expensed')).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Type'), 'personal')
+    await user.selectOptions(screen.getByLabelText('Sort'), 'personal')
     await waitFor(() => expect(screen.queryByLabelText('Expensed')).not.toBeInTheDocument())
     expect(screen.getByLabelText('Category')).toBeInTheDocument()
+  })
+
+  it('invalidates analytics when expensed is toggled (drives Dashboard awaiting-reimbursement)', async () => {
+    const workTx = { ...mockTransactions[0], id: 7, description: 'Client lunch', classification: 'work' as const }
+    server.use(
+      http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([workTx]))),
+      http.put('/api/v1/transactions/:id', () => HttpResponse.json({ ...workTx, expensed: true })),
+    )
+    const user = userEvent.setup()
+    const { queryClient } = renderWithProviders(<TransactionsPage />, { route: '/transactions?classification=work' })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    await user.click(await screen.findByLabelText('Mark Client lunch as expensed'))
+
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] }))
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['transactions'] })
   })
 
   it('initializes filters from URL search params (deep link)', async () => {
@@ -41,9 +57,9 @@ describe('TransactionsPage', () => {
     )
     renderWithProviders(<TransactionsPage />, { route: '/transactions?classification=work&expensed=unexpensed' })
 
-    // Type select reflects the URL, and the work-only Expensed filter is shown.
+    // Sort select reflects the URL, and the work-only Expensed filter is shown.
     expect(await screen.findByLabelText('Expensed')).toBeInTheDocument()
-    expect((screen.getByLabelText('Type') as HTMLSelectElement).value).toBe('work')
+    expect((screen.getByLabelText('Sort') as HTMLSelectElement).value).toBe('work')
 
     await waitFor(() => {
       const latest = calls[calls.length - 1]
@@ -80,6 +96,42 @@ describe('TransactionsPage', () => {
     renderWithProviders(<TransactionsPage />, { route: '/transactions?start_date=not-a-date&end_date=05%2F31%2F2026' })
     expect((await screen.findByLabelText('From') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('To') as HTMLInputElement).value).toBe('')
+  })
+
+  it('passes transaction_type to the API when the Type filter is narrowed', async () => {
+    const calls: string[] = []
+    server.use(
+      http.get('/api/v1/transactions', ({ request }) => {
+        calls.push(new URL(request.url).search)
+        return HttpResponse.json(pageOf([]))
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<TransactionsPage />)
+
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0))
+    // The default "All" view sends no transaction_type filter at all.
+    expect(calls[calls.length - 1]).not.toContain('transaction_type')
+
+    await user.selectOptions(screen.getByLabelText('Type'), 'credit')
+    await waitFor(() => expect(calls[calls.length - 1]).toContain('transaction_type=credit'))
+
+    await user.selectOptions(screen.getByLabelText('Type'), 'debit')
+    await waitFor(() => expect(calls[calls.length - 1]).toContain('transaction_type=debit'))
+  })
+
+  it('initializes the Type filter from the transaction_type URL param (deep link)', async () => {
+    const calls: string[] = []
+    server.use(
+      http.get('/api/v1/transactions', ({ request }) => {
+        calls.push(new URL(request.url).search)
+        return HttpResponse.json(pageOf([]))
+      }),
+    )
+    renderWithProviders(<TransactionsPage />, { route: '/transactions?transaction_type=credit' })
+
+    expect(((await screen.findByLabelText('Type')) as HTMLSelectElement).value).toBe('credit')
+    await waitFor(() => expect(calls[calls.length - 1]).toContain('transaction_type=credit'))
   })
 
   it('auto-opens the add modal from the action URL param', async () => {
@@ -264,6 +316,38 @@ describe('TransactionsPage', () => {
         expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['imports'] })
       })
     })
+
+    it('Undo recreates a manual row and refreshes ledger + analytics caches', async () => {
+      let createBody: Record<string, unknown> | null = null
+      server.use(
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([mockManualTransaction]))),
+        http.delete('/api/v1/transactions/:id', () => HttpResponse.json(mockManualTransaction)),
+        http.post('/api/v1/transactions/manual', async ({ request }) => {
+          createBody = (await request.json()) as Record<string, unknown>
+          return HttpResponse.json(mockManualTransaction, { status: 201 })
+        }),
+      )
+      const user = userEvent.setup()
+      const { queryClient } = renderWithProviders(<TransactionsPage />)
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+      await screen.findByText('Manual entry')
+      await user.click(screen.getByRole('button', { name: /delete/i }))
+      await screen.findByRole('dialog')
+      await user.click(screen.getByRole('button', { name: /^delete$/i }))
+
+      // Wait for the delete toast, then clear the spy so the assertions below
+      // can only be satisfied by the Undo path, not the delete's invalidations.
+      const undoBtn = await screen.findByRole('button', { name: /undo/i })
+      invalidateSpy.mockClear()
+      await user.click(undoBtn)
+
+      await waitFor(() => expect(createBody).not.toBeNull())
+      expect(createBody).toMatchObject({ description: 'Manual entry', amount_cents: 1500 })
+      await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard'] }))
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['transactions'] })
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['spending'] })
+    })
   })
 
   // ---------------------------------------------------------------------------
@@ -319,6 +403,75 @@ describe('TransactionsPage', () => {
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
       expect(body).toEqual({ classification: 'personal', personal_category: 'Dining', expensed: false, card_id: null })
+    })
+
+    it('hides the amount/type fields for imported rows', async () => {
+      server.use(
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf(mockTransactions))),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<TransactionsPage />)
+      await screen.findByText('Coffee shop')
+
+      await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).queryByLabelText('Amount ($)')).not.toBeInTheDocument()
+      expect(within(dialog).queryByLabelText('Type')).not.toBeInTheDocument()
+    })
+
+    it('shows amount/type fields for manual rows and sends them in the PUT', async () => {
+      let body: Record<string, unknown> | null = null
+      server.use(
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([mockManualTransaction]))),
+        http.put('/api/v1/transactions/:id', async ({ request }) => {
+          body = (await request.json()) as Record<string, unknown>
+          return HttpResponse.json({ ...mockManualTransaction, amount_cents: 2599, transaction_type: 'credit' })
+        }),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<TransactionsPage />)
+      await screen.findByText('Manual entry')
+
+      await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+      const dialog = await screen.findByRole('dialog')
+
+      const amountInput = within(dialog).getByLabelText('Amount ($)') as HTMLInputElement
+      expect(amountInput.value).toBe('15.00') // pre-filled from amount_cents=1500
+      await user.clear(amountInput)
+      await user.type(amountInput, '25.99')
+      await user.selectOptions(within(dialog).getByLabelText('Type'), 'credit')
+      await user.click(within(dialog).getByRole('button', { name: /save/i }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(body).toEqual({
+        classification: null,
+        personal_category: null,
+        expensed: false,
+        card_id: null,
+        amount_cents: 2599,
+        transaction_type: 'credit',
+      })
+    })
+
+    it('rejects a non-positive amount on a manual row without calling the API', async () => {
+      const put = vi.fn()
+      server.use(
+        http.get('/api/v1/transactions', () => HttpResponse.json(pageOf([mockManualTransaction]))),
+        http.put('/api/v1/transactions/:id', () => { put(); return HttpResponse.json(mockManualTransaction) }),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<TransactionsPage />)
+      await screen.findByText('Manual entry')
+
+      await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+      const dialog = await screen.findByRole('dialog')
+      const amountInput = within(dialog).getByLabelText('Amount ($)')
+      await user.clear(amountInput)
+      await user.type(amountInput, '0')
+      await user.click(within(dialog).getByRole('button', { name: /save/i }))
+
+      expect(await within(dialog).findByText('Enter a positive amount')).toBeInTheDocument()
+      expect(put).not.toHaveBeenCalled()
     })
   })
 })

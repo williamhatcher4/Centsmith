@@ -72,6 +72,33 @@ describe('DataDiagnosticsCard', () => {
     expect(await screen.findByText(/Backup saved to .*centsmith-backup/i)).toBeInTheDocument()
   })
 
+  it('the backup toast opens the backup folder, not the data folder', async () => {
+    window.__TAURI__ = { core: { invoke: vi.fn() } }
+    let openedBackupFolder = false
+    let openedDataFolder = false
+    server.use(
+      http.post('/api/v1/maintenance/backup-to-disk', () =>
+        HttpResponse.json({ path: 'D:/Backups/centsmith-backup-20260611-120000.db' }),
+      ),
+      http.post('/api/v1/maintenance/open-backup-folder', () => {
+        openedBackupFolder = true
+        return HttpResponse.json({ opened: true, path: 'D:/Backups' })
+      }),
+      http.post('/api/v1/maintenance/open-data-folder', () => {
+        openedDataFolder = true
+        return HttpResponse.json({ opened: true, path: 'C:/Users/test/AppData/Roaming/Centsmith' })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<DataDiagnosticsCard />)
+
+    await user.click(screen.getByRole('button', { name: /back up data/i }))
+    await user.click(await screen.findByRole('button', { name: /open folder/i }))
+
+    await waitFor(() => expect(openedBackupFolder).toBe(true))
+    expect(openedDataFolder).toBe(false)
+  })
+
   it('downloads a backup in the browser build', async () => {
     let downloaded = false
     server.use(
@@ -162,5 +189,87 @@ describe('DataDiagnosticsCard', () => {
 
     await waitFor(() => expect(restoredName).toBe('centsmith-backup-20260604-120000.db'))
     expect(await screen.findByText(/Data restored/i)).toBeInTheDocument()
+  })
+
+  describe('backup folder setting', () => {
+    it('shows the saved backup folder and disables Save while unchanged', async () => {
+      server.use(
+        http.get('/api/v1/settings', () =>
+          HttpResponse.json({ personal_categories: ['Other'], hidden_pages: [], backup_folder: 'D:\\Backups' }),
+        ),
+      )
+      renderWithProviders(<DataDiagnosticsCard />)
+      await waitFor(() => expect((screen.getByLabelText('Backup folder') as HTMLInputElement).value).toBe('D:\\Backups'))
+      expect(screen.getByRole('button', { name: /save folder/i })).toBeDisabled()
+    })
+
+    it('saves a new folder via the settings PUT and preserves categories/pages', async () => {
+      let body: Record<string, unknown> | null = null
+      server.use(
+        http.get('/api/v1/settings', () =>
+          HttpResponse.json({ personal_categories: ['Other', 'Income'], hidden_pages: ['/spending'], backup_folder: null }),
+        ),
+        http.put('/api/v1/settings', async ({ request }) => {
+          body = (await request.json()) as Record<string, unknown>
+          return HttpResponse.json({ ...(body as object), backup_folder: 'E:\\CentsmithBackups' })
+        }),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<DataDiagnosticsCard />)
+
+      const input = screen.getByLabelText('Backup folder')
+      await user.type(input, 'E:\\CentsmithBackups')
+      await user.click(screen.getByRole('button', { name: /save folder/i }))
+
+      await waitFor(() => expect(body).not.toBeNull())
+      expect(body).toEqual({
+        personal_categories: ['Other', 'Income'],
+        hidden_pages: ['/spending'],
+        backup_folder: 'E:\\CentsmithBackups',
+      })
+      expect(await screen.findByText(/Backups will be saved to E:\\CentsmithBackups/i)).toBeInTheDocument()
+    })
+
+    it('clearing the input saves null to fall back to the default folder', async () => {
+      let body: Record<string, unknown> | null = null
+      server.use(
+        http.get('/api/v1/settings', () =>
+          HttpResponse.json({ personal_categories: ['Other'], hidden_pages: [], backup_folder: 'D:\\Backups' }),
+        ),
+        http.put('/api/v1/settings', async ({ request }) => {
+          body = (await request.json()) as Record<string, unknown>
+          return HttpResponse.json({ ...(body as object), backup_folder: null })
+        }),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<DataDiagnosticsCard />)
+
+      const input = screen.getByLabelText('Backup folder')
+      await waitFor(() => expect((input as HTMLInputElement).value).toBe('D:\\Backups'))
+      await user.clear(input)
+      await user.click(screen.getByRole('button', { name: /save folder/i }))
+
+      await waitFor(() => expect(body).not.toBeNull())
+      expect(body).toMatchObject({ backup_folder: null })
+      expect(await screen.findByText('Backups will use the default folder')).toBeInTheDocument()
+    })
+
+    it('surfaces a backend rejection of an invalid folder', async () => {
+      server.use(
+        http.get('/api/v1/settings', () =>
+          HttpResponse.json({ personal_categories: ['Other'], hidden_pages: [], backup_folder: null }),
+        ),
+        http.put('/api/v1/settings', () =>
+          HttpResponse.json({ detail: 'Backup folder does not exist or is not a directory.' }, { status: 400 }),
+        ),
+      )
+      const user = userEvent.setup()
+      renderWithProviders(<DataDiagnosticsCard />)
+
+      await user.type(screen.getByLabelText('Backup folder'), 'Q:\\missing')
+      await user.click(screen.getByRole('button', { name: /save folder/i }))
+
+      expect(await screen.findByText(/does not exist/i)).toBeInTheDocument()
+    })
   })
 })

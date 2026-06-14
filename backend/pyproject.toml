@@ -43,7 +43,10 @@ include = ["app*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--cov=app --cov-report=term-missing --cov-fail-under=85"
+# Coverage gate ratcheted to actual-5 (P5.2, 2026-06-12): measured 92.67% ->
+# fail-under 87. Re-ratchet to actual-5 after any item that adds a meaningful
+# test batch; never lower the gate to merge -- shrink the change or add tests.
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=87"
 markers = [
     "perf: slow performance/load tests over a synthetic large-ledger fixture",
 ]

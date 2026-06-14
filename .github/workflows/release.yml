@@ -224,6 +224,9 @@ jobs:
             }
           }
           $updater | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $updaterPath -Encoding utf8
+          # Fail the release if the manifest doesn't match the Tauri updater
+          # schema — a malformed feed would brick auto-update for every install.
+          & .\packaging\validate-release-artifacts.ps1 -UpdaterJsonPath $updaterPath
           Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/updater.json", "--file=$updaterPath", "--content-type", "application/json", "--remote")
 
           $releases = @()
@@ -241,6 +244,28 @@ jobs:
           $trimmedReleases = @($releases | Select-Object -First 20)
           ConvertTo-Json -InputObject $trimmedReleases -Depth 8 -AsArray | Set-Content -LiteralPath $mergedReleasesPath -Encoding utf8
           Invoke-Wrangler @("r2", "object", "put", "${{ env.R2_BUCKET }}/${{ env.R2_PREFIX }}/releases.json", "--file=$mergedReleasesPath", "--content-type", "application/json", "--remote")
+
+          # Hand the version + installer hash to the published-feed contract check.
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "INSTALLER_SHA256=$sha256" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Verify published update feed serves this release (P5.3)
+        shell: pwsh
+        env:
+          CENTSMITH_TEST_LICENSE: ${{ secrets.CENTSMITH_TEST_LICENSE }}
+        run: |
+          # Prove the just-published feed serves the new version and the exact
+          # installer bytes through the licensed gate. With the secret absent, run
+          # rejection-only checks and warn (a missing secret must not block releases).
+          $params = @{ BaseUrl = "${{ env.UPDATER_BASE_URL }}" }
+          if (-not [string]::IsNullOrWhiteSpace($env:CENTSMITH_TEST_LICENSE)) {
+            $params.License = $env:CENTSMITH_TEST_LICENSE
+            $params.ExpectedVersion = $env:RELEASE_VERSION
+            $params.ExpectedInstallerSha256 = $env:INSTALLER_SHA256
+          } else {
+            Write-Host "::warning::CENTSMITH_TEST_LICENSE not set; running rejection-only contract checks (steps 1-3)."
+          }
+          & .\packaging\update-contract-test.ps1 @params
 
       - name: Installer smoke test (install, launch, health probe, uninstall)
         shell: pwsh

@@ -20,6 +20,7 @@ backend/.env.*
 /credit_tracker.db
 /centsmith.db
 /centsmith-e2e.db
+/backups/
 *.sqlite
 *.sqlite3
 *.db-journal
@@ -32,6 +33,8 @@ e2e/test-results/
 e2e/playwright-report/
 e2e/.playwright-cli/
 .playwright/
+
+node_modules/
 
 # Runtime logs and local metadata
 *.log

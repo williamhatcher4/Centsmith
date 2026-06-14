@@ -7,6 +7,7 @@ import { cardsApi } from '../api/cards'
 import { transactionsApi } from '../api/transactions'
 import type { ColumnMapping, ImportPreview, ImportResult } from '../types'
 import { cn } from '../utils/cn'
+import { invalidateAnalytics, invalidateLedger } from '../utils/queryInvalidation'
 import { Badge, Button, Field, Modal, Select, useToast } from './ui'
 import { defaultMappingDraft, draftToMapping, repeatGroupInfo, signedMoney, type MappingDraft } from './ImportModal.helpers'
 
@@ -139,6 +140,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [chargesPositive, setChargesPositive] = useState<boolean | undefined>(undefined)
+  const [dayFirst, setDayFirst] = useState<boolean | undefined>(undefined)
   const [appliedMapping, setAppliedMapping] = useState<ColumnMapping | null>(null)
   const [appliedDraft, setAppliedDraft] = useState<MappingDraft | null>(null)
   const [profileId, setProfileId] = useState<number | undefined>(undefined)
@@ -174,7 +176,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
     ? `${result?.skipped ?? 0} duplicates skipped.${errorsCopy} New transactions are waiting in the Personal Inbox.`
     : `${result?.skipped ?? 0} duplicates skipped. ${result?.ignored_credits ?? 0} credit transactions ignored.${errorsCopy} New spending is waiting in the Inbox.`
 
-  async function runPreview(nextFile: File, opts: { mapping?: ColumnMapping; profileId?: number; chargesPositive?: boolean } = {}) {
+  async function runPreview(nextFile: File, opts: { mapping?: ColumnMapping; profileId?: number; chargesPositive?: boolean; dayFirst?: boolean } = {}) {
     setError('')
     setLoading(true)
     try {
@@ -182,7 +184,10 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
         ? await transactionsApi.previewCheckingImport(nextFile, opts)
         : await transactionsApi.previewImport(nextFile, opts)
       setPreview(next)
-      if (!next.mapping_required) setChargesPositive(next.charges_positive)
+      if (!next.mapping_required) {
+        setChargesPositive(next.charges_positive)
+        setDayFirst(next.day_first)
+      }
       return next
     } catch (err) {
       setError((err as Error).message)
@@ -224,7 +229,22 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
   async function applySign(next: boolean) {
     if (!file) return
     setChargesPositive(next)
-    await runPreview(file, { chargesPositive: next, ...(appliedMapping ? { mapping: appliedMapping } : {}) })
+    await runPreview(file, {
+      chargesPositive: next,
+      ...(dayFirst !== undefined ? { dayFirst } : {}),
+      ...(appliedMapping ? { mapping: appliedMapping } : {}),
+    })
+  }
+
+  async function applyDayFirst(next: boolean) {
+    if (!file) return
+    setDayFirst(next)
+    await runPreview(file, {
+      dayFirst: next,
+      ...(!isChecking && chargesPositive !== undefined ? { chargesPositive } : {}),
+      ...(appliedMapping ? { mapping: appliedMapping } : {}),
+      ...(profileId !== undefined ? { profileId } : {}),
+    })
   }
 
   const saveProfileMutation = useMutation({
@@ -241,6 +261,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
         debit_column: m.debit_column ?? null,
         credit_column: m.credit_column ?? null,
         amount_convention: d?.amount_convention ?? 'signed',
+        date_convention: preview?.date_convention_adjustable ? (dayFirst ? 'dmy' : 'mdy') : null,
         ignored_payment_patterns: [],
       })
     },
@@ -253,11 +274,8 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
   })
 
   function invalidateImportQueries() {
-    qc.invalidateQueries({ queryKey: ['transactions'] })
-    qc.invalidateQueries({ queryKey: ['dashboard'] })
-    qc.invalidateQueries({ queryKey: ['spending'] })
-    qc.invalidateQueries({ queryKey: ['income'] })
-    qc.invalidateQueries({ queryKey: ['imports'] })
+    invalidateLedger(qc)
+    invalidateAnalytics(qc)
   }
 
   async function confirm() {
@@ -266,6 +284,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
     setError('')
     try {
       const confirmOpts = {
+        ...(dayFirst !== undefined ? { dayFirst } : {}),
         ...(appliedMapping ? { mapping: appliedMapping } : {}),
         ...(profileId !== undefined ? { profileId } : {}),
       }
@@ -305,6 +324,7 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
     setResult(null)
     setError('')
     setChargesPositive(undefined)
+    setDayFirst(undefined)
     setAppliedMapping(null)
     setAppliedDraft(null)
     setProfileName('')
@@ -366,6 +386,15 @@ export function ImportModal({ onClose, mode = 'card' }: { onClose: () => void; m
               <span>
                 <span className="font-medium text-[var(--text)]">Charges are shown as positive (AmEx-style)</span>
                 <span className="mt-0.5 block text-xs text-[var(--text-subtle)]">Turn on if purchases are positive numbers and payments/refunds are negative in your file.</span>
+              </span>
+            </label>
+          )}
+          {preview.date_convention_adjustable && (
+            <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-[8px] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-sm">
+              <input type="checkbox" checked={dayFirst ?? false} disabled={loading} onChange={(e) => applyDayFirst(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
+              <span>
+                <span className="font-medium text-[var(--text)]">Dates are day-first (DD/MM)</span>
+                <span className="mt-0.5 block text-xs text-[var(--text-subtle)]">Turn on if your file writes May 4 as 04/05. We can&rsquo;t tell automatically when every date could be read either way.</span>
               </span>
             </label>
           )}

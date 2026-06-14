@@ -9,6 +9,7 @@ from xlwt import Workbook
 from app.services.statement_import_service import (
     FORMAT_NAMES,
     _assign_occurrences,
+    _dates_ambiguous,
     _is_blank,
     _looks_like_date,
     _parse_amount,
@@ -51,6 +52,107 @@ def test_parse_date_regex_fallback_handles_two_digit_year():
 def test_parse_date_rejects_garbage():
     with pytest.raises(ValueError):
         _parse_date("not a date")
+
+
+# ---------------------------------------------------------------------------
+# P3.4: day-first date convention
+# ---------------------------------------------------------------------------
+
+
+def test_parse_date_day_first_reads_ambiguous_dates_as_dd_mm():
+    assert _parse_date("04/05/2026", day_first=True) == date(2026, 5, 4)
+    assert _parse_date("04/05/2026") == date(2026, 4, 5)
+
+
+def test_parse_date_day_first_regex_fallback_handles_dashes_and_two_digit_years():
+    assert _parse_date("04-05-26", day_first=True) == date(2026, 5, 4)
+    assert _parse_date("04-05-26") == date(2026, 4, 5)
+
+
+def test_parse_date_day_first_leaves_unambiguous_formats_alone():
+    assert _parse_date("2026-05-04", day_first=True) == date(2026, 5, 4)
+    assert _parse_date("May 4, 2026", day_first=True) == date(2026, 5, 4)
+    assert _parse_date("13/05/2026", day_first=True) == date(2026, 5, 13)
+    # A day > 12 self-disambiguates even without the flag.
+    assert _parse_date("13/05/2026") == date(2026, 5, 13)
+
+
+def test_dates_ambiguous_when_all_fields_at_most_twelve():
+    assert _dates_ambiguous(["04/05/2026", "01/02/26", "12-12-2026"]) is True
+
+
+def test_dates_ambiguous_negative_cases():
+    # A single day > 12 disambiguates the whole column.
+    assert _dates_ambiguous(["04/05/2026", "13/05/2026"]) is False
+    # ISO / month-name / native / numeric cells are never ambiguous.
+    assert _dates_ambiguous(["2026-05-04", "May 4, 2026"]) is False
+    assert _dates_ambiguous([date(2026, 5, 4), 45000.0, None]) is False
+    assert _dates_ambiguous([]) is False
+
+
+def test_csv_day_first_toggle_changes_parsed_dates_and_is_advertised():
+    csv_bytes = b"Date,Description,Amount\n04/05/2026,Coffee,-4.25\n01/02/2026,Lunch,-9.50\n"
+
+    default = parse_statement_ex("statement.csv", csv_bytes)
+    assert default.date_convention_adjustable is True
+    assert default.day_first is False
+    assert [r.transaction_date for r in default.rows] == [date(2026, 4, 5), date(2026, 1, 2)]
+
+    dmy = parse_statement_ex("statement.csv", csv_bytes, day_first=True)
+    assert dmy.day_first is True
+    assert [r.transaction_date for r in dmy.rows] == [date(2026, 5, 4), date(2026, 2, 1)]
+    # The convention is part of the row identity: hashes must differ.
+    assert default.rows[0].source_hash != dmy.rows[0].source_hash
+
+
+def test_csv_with_disambiguating_row_hides_the_toggle_and_parses_correctly():
+    csv_bytes = b"Date,Description,Amount\n13/05/2026,Coffee,-4.25\n04/05/2026,Lunch,-9.50\n"
+    result = parse_statement_ex("statement.csv", csv_bytes)
+    assert result.date_convention_adjustable is False
+    assert result.rows[0].transaction_date == date(2026, 5, 13)
+
+
+def test_headerless_account_activity_csv_day_first():
+    csv_bytes = b"04/05/2026,Coffee,4.25,\n"
+    default = parse_statement_ex("statement.csv", csv_bytes)
+    assert default.statement_format == FORMAT_NAMES["accountactivity"]
+    assert default.date_convention_adjustable is True
+    assert default.rows[0].transaction_date == date(2026, 4, 5)
+
+    dmy = parse_statement_ex("statement.csv", csv_bytes, day_first=True)
+    assert dmy.rows[0].transaction_date == date(2026, 5, 4)
+
+
+def test_xls_text_dates_day_first():
+    book = Workbook()
+    sheet = book.add_sheet("Sheet1")
+    for col, header in enumerate(["Date", "Description", "Amount"]):
+        sheet.write(0, col, header)
+    sheet.write(1, 0, "04/05/2026")
+    sheet.write(1, 1, "Coffee")
+    sheet.write(1, 2, 4.25)
+    buffer = io.BytesIO()
+    book.save(buffer)
+    raw = buffer.getvalue()
+
+    default = parse_statement_ex("statement.xls", raw)
+    assert default.date_convention_adjustable is True
+    assert default.rows[0].transaction_date == date(2026, 4, 5)
+
+    dmy = parse_statement_ex("statement.xls", raw, day_first=True)
+    assert dmy.day_first is True
+    assert dmy.rows[0].transaction_date == date(2026, 5, 4)
+
+
+def test_ofx_dates_are_never_convention_adjustable():
+    ofx = (
+        b"OFXHEADER:100\n\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKTRANLIST>"
+        b"<STMTTRN>\n<DTPOSTED>20260504\n<TRNAMT>-4.25\n<NAME>Coffee\n</STMTTRN>"
+        b"</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"
+    )
+    result = parse_statement_ex("statement.ofx", ofx)
+    assert result.date_convention_adjustable is False
+    assert result.rows[0].transaction_date == date(2026, 5, 4)
 
 
 def test_parse_date_accepts_native_date_and_datetime():

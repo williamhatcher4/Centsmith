@@ -144,6 +144,81 @@ def test_inline_column_mapping_on_preview(authed_client):
     assert preview.json()["to_import"] == 1
 
 
+# ---------------------------------------------------------------------------
+# P3.4: saved date convention (day-first imports)
+# ---------------------------------------------------------------------------
+
+
+def test_date_convention_round_trips_through_profile_crud(authed_client):
+    created = authed_client.post(
+        "/api/v1/import-profiles", json=_profile_payload(name="DMY Bank", date_convention="dmy")
+    )
+    assert created.status_code == 201
+    assert created.json()["date_convention"] == "dmy"
+
+    listed = authed_client.get("/api/v1/import-profiles").json()
+    assert listed[0]["date_convention"] == "dmy"
+
+    pid = created.json()["id"]
+    updated = authed_client.put(
+        f"/api/v1/import-profiles/{pid}", json=_profile_payload(name="DMY Bank", date_convention=None)
+    )
+    assert updated.status_code == 200
+    assert updated.json()["date_convention"] is None
+
+
+def test_profile_defaults_to_no_date_convention(authed_client):
+    created = authed_client.post("/api/v1/import-profiles", json=_profile_payload())
+    assert created.status_code == 201
+    assert created.json()["date_convention"] is None
+
+
+def test_invalid_date_convention_rejected(authed_client):
+    resp = authed_client.post(
+        "/api/v1/import-profiles", json=_profile_payload(date_convention="ymd")
+    )
+    assert resp.status_code == 422
+
+
+def test_profile_date_convention_applies_without_the_toggle(authed_client):
+    ambiguous_csv = b"Col A,Col B,Col C\n04/05/2026,Coffee,-4.25\n"
+    pid = authed_client.post(
+        "/api/v1/import-profiles", json=_profile_payload(name="Canadian Bank", date_convention="dmy")
+    ).json()["id"]
+
+    preview = authed_client.post(
+        "/api/v1/transactions/import/preview",
+        files={"file": ("statement.csv", ambiguous_csv, "text/csv")},
+        data={"profile_id": str(pid)},
+    )
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["day_first"] is True
+    assert body["rows"][0]["date"] == "2026-05-04"
+
+    # An explicit toggle wins over the profile's saved convention.
+    overridden = authed_client.post(
+        "/api/v1/transactions/import/preview",
+        files={"file": ("statement.csv", ambiguous_csv, "text/csv")},
+        data={"profile_id": str(pid), "day_first": "false"},
+    )
+    assert overridden.status_code == 200
+    assert overridden.json()["day_first"] is False
+    assert overridden.json()["rows"][0]["date"] == "2026-04-05"
+
+
+def test_inline_column_mapping_accepts_date_convention(authed_client):
+    unknown_csv = b"Col A,Col B,Col C\n04/05/2026,Coffee,-4.25\n"
+    mapping = '{"date_column":0,"description_column":1,"amount_column":2,"amount_convention":"signed","date_convention":"dmy"}'
+    preview = authed_client.post(
+        "/api/v1/transactions/import/preview",
+        files={"file": ("statement.csv", unknown_csv, "text/csv")},
+        data={"column_mapping": mapping},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["rows"][0]["date"] == "2026-05-04"
+
+
 def test_profile_ignored_patterns_exclude_rows(authed_client):
     csv_bytes = b"Col A,Col B,Col C\n2026-05-01,COFFEE,-4.25\n2026-05-02,AUTOPAY THANKS,-50.00\n"
     pid = authed_client.post(

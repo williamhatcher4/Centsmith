@@ -36,7 +36,7 @@ function Stop-ProjectServers {
 
 $InstallBackend = $false
 if (!(Test-Path $Python)) {
-  py -3.10 -m venv (Join-Path $Backend ".venv")
+  py -3.12 -m venv (Join-Path $Backend ".venv")
   & $Python -m pip install --upgrade pip
   $InstallBackend = $true
 } else {

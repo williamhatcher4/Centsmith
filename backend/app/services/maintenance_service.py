@@ -81,8 +81,43 @@ def reveal_in_file_manager(path: Path) -> bool:
 
 
 def backups_dir(engine: Engine) -> Path:
-    """The ``backups/`` folder beside the database where on-disk backups live."""
-    return database_path(engine).parent / "backups"
+    """Where on-disk backups live: the user-configured folder, else ``backups/``
+    beside the database.
+
+    Reads ``user_settings.backup_folder`` with raw SQL so this stays usable from
+    any engine without a session; any read failure (missing table/column on an
+    old schema) silently falls back to the default folder.
+    """
+    default = database_path(engine).parent / "backups"
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT backup_folder FROM user_settings WHERE id = 1")).fetchone()
+    except Exception:
+        return default
+    configured = row[0] if row else None
+    if configured and str(configured).strip():
+        return Path(str(configured).strip())
+    return default
+
+
+def validate_backup_folder(raw: str) -> str:
+    """Normalize and validate a user-supplied backup folder path.
+
+    Returns the stripped absolute path. Raises ValueError unless it is an
+    existing, writable directory — writability is proven with a probe file
+    because ``os.access`` is unreliable on Windows.
+    """
+    folder = Path(raw.strip()).expanduser()
+    if not folder.is_absolute():
+        raise ValueError("Backup folder must be an absolute path.")
+    if not folder.is_dir():
+        raise ValueError("Backup folder does not exist or is not a directory.")
+    try:
+        with tempfile.NamedTemporaryFile(dir=str(folder), prefix=".centsmith-write-probe-"):
+            pass
+    except OSError as exc:
+        raise ValueError("Backup folder is not writable.") from exc
+    return str(folder)
 
 
 # Filename of the update-license token, kept beside the database. This is the
@@ -141,6 +176,45 @@ def clear_license_token(engine: Engine) -> dict:
     return license_status(engine)
 
 
+# Filename of the last update-check outcome, written by the desktop shell
+# beside the database (the shell's data dir is the DB's folder). The shell
+# sanitizes the detail before writing, so the license token never appears here.
+UPDATE_CHECK_FILE_NAME = "update-check.json"
+
+
+def update_check_status(engine: Engine) -> dict:
+    """Report the last auto-update check the desktop shell recorded.
+
+    Returns ``{"present": False, ...}`` when no check has run yet (file absent)
+    or the file is unreadable/malformed. Only the known fields are passed
+    through, each coerced to a string or None, so the response shape is stable
+    regardless of what is on disk.
+    """
+    absent = {"present": False, "checked_at": None, "result": None, "detail": None}
+    path = database_path(engine).parent / UPDATE_CHECK_FILE_NAME
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return absent
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return absent
+    if not isinstance(data, dict):
+        return absent
+
+    def _str_or_none(key: str) -> Optional[str]:
+        value = data.get(key)
+        return value if isinstance(value, str) else None
+
+    return {
+        "present": True,
+        "checked_at": _str_or_none("checked_at"),
+        "result": _str_or_none("result"),
+        "detail": _str_or_none("detail"),
+    }
+
+
 def write_backup_to_disk(engine: Engine) -> Path:
     """Write a backup file into a ``backups/`` folder beside the database.
 
@@ -148,12 +222,26 @@ def write_backup_to_disk(engine: Engine) -> Path:
     `<a download>` blob clicks and the webview's remote-origin IPC is
     unreliable), so the local backend writes the file itself and returns the
     path for the UI to display. Returns the full path to the created file.
+
+    Raises ValueError when the folder can't be created or written: a configured
+    folder is only validated when saved, so it can vanish later (unplugged
+    drive, deleted directory, path now a file) — that must surface as a clear
+    400, not a 500. No silent fallback to the default folder here, because the
+    restore list reads the configured folder and would never show the file.
     """
+    data = backup_database(engine)
     folder = backups_dir(engine)
-    folder.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     dest = folder / f"centsmith-backup-{stamp}.db"
-    dest.write_bytes(backup_database(engine))
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+    except OSError as exc:
+        raise ValueError(
+            f"Could not write the backup to {folder}. Check that the backup "
+            "folder still exists and is writable, or clear it in Settings to "
+            "use the default folder."
+        ) from exc
     return dest
 
 

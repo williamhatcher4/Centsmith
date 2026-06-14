@@ -351,3 +351,362 @@ def test_license_endpoints_require_auth(env):
     assert client.get("/api/v1/maintenance/license").status_code == 401
     assert client.post("/api/v1/maintenance/license", json={"token": "x"}).status_code == 401
     assert client.delete("/api/v1/maintenance/license").status_code == 401
+
+
+# --- Update-check status (P2.2: written by the desktop shell) ------------------
+
+
+def _update_check_file(env) -> Path:
+    """The status file lives beside the database — where the shell writes it."""
+    return env.db_path.parent / "update-check.json"
+
+
+def test_update_status_absent_when_no_check_recorded(env):
+    resp = env.client.get("/api/v1/maintenance/update-status")
+    assert resp.status_code == 200
+    assert resp.json() == {"present": False, "checked_at": None, "result": None, "detail": None}
+
+
+def test_update_status_returns_recorded_check(env):
+    _update_check_file(env).write_text(
+        '{"checked_at": "2026-06-09T08:15:00Z", "result": "ok-uptodate", "detail": ""}',
+        encoding="utf-8",
+    )
+    resp = env.client.get("/api/v1/maintenance/update-status")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "present": True,
+        "checked_at": "2026-06-09T08:15:00Z",
+        "result": "ok-uptodate",
+        "detail": "",
+    }
+
+
+def test_update_status_surfaces_error_result(env):
+    _update_check_file(env).write_text(
+        '{"checked_at": "2026-06-09T08:15:00Z", "result": "error", "detail": "connection refused"}',
+        encoding="utf-8",
+    )
+    body = env.client.get("/api/v1/maintenance/update-status").json()
+    assert body["present"] is True
+    assert body["result"] == "error"
+    assert body["detail"] == "connection refused"
+
+
+def test_update_status_tolerates_malformed_file(env):
+    _update_check_file(env).write_text("not json {", encoding="utf-8")
+    resp = env.client.get("/api/v1/maintenance/update-status")
+    assert resp.status_code == 200
+    assert resp.json() == {"present": False, "checked_at": None, "result": None, "detail": None}
+
+
+def test_update_status_tolerates_non_object_json(env):
+    _update_check_file(env).write_text('["unexpected"]', encoding="utf-8")
+    assert env.client.get("/api/v1/maintenance/update-status").json()["present"] is False
+
+
+def test_update_status_ignores_unknown_and_non_string_fields(env):
+    _update_check_file(env).write_text(
+        '{"checked_at": 12345, "result": "ok-uptodate", "extra": "x"}',
+        encoding="utf-8",
+    )
+    body = env.client.get("/api/v1/maintenance/update-status").json()
+    # Non-string fields coerce to None and unknown keys are dropped.
+    assert body == {"present": True, "checked_at": None, "result": "ok-uptodate", "detail": None}
+
+
+def test_update_status_requires_auth(env):
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+    assert client.get("/api/v1/maintenance/update-status").status_code == 401
+
+
+# --- Pre-migration auto-backup (P0.3) ------------------------------------------
+
+
+EARLIER_REVISION = "20260602_0006"
+
+
+@pytest.fixture()
+def older_rev_db(tmp_path, monkeypatch):
+    """A real database migrated to an older revision, with settings pointed at it."""
+    from alembic import command
+
+    from app import migrations
+
+    db_path = tmp_path / "older.db"
+    monkeypatch.setattr(app_settings, "database_url", f"sqlite:///{db_path}")
+    command.upgrade(migrations._alembic_config(), EARLIER_REVISION)
+    return db_path
+
+
+def _pre_migration_snapshots(db_path: Path) -> list[Path]:
+    folder = db_path.parent / "backups"
+    return sorted(folder.glob("pre-migration-*.db")) if folder.is_dir() else []
+
+
+def _revision_of(db_file: Path) -> str:
+    conn = sqlite3.connect(str(db_file))
+    try:
+        return conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_pre_migration_snapshot_created(older_rev_db):
+    run_migrations()
+    snaps = _pre_migration_snapshots(older_rev_db)
+    assert len(snaps) == 1
+    assert EARLIER_REVISION in snaps[0].name
+    # The snapshot preserves the pre-upgrade revision; the live DB moved to head.
+    assert _revision_of(snaps[0]) == EARLIER_REVISION
+    assert _revision_of(older_rev_db) != EARLIER_REVISION
+
+
+def test_no_snapshot_when_at_head(tmp_path, monkeypatch):
+    db_path = tmp_path / "fresh.db"
+    monkeypatch.setattr(app_settings, "database_url", f"sqlite:///{db_path}")
+    # Fresh install: no alembic_version table yet — no snapshot.
+    run_migrations()
+    assert _pre_migration_snapshots(db_path) == []
+    # Second startup at head — still no snapshot.
+    run_migrations()
+    assert _pre_migration_snapshots(db_path) == []
+
+
+def test_pre_migration_snapshot_retention(older_rev_db):
+    import os
+
+    backups = older_rev_db.parent / "backups"
+    backups.mkdir()
+    seeded = []
+    for i in range(3):
+        stale = backups / f"pre-migration-oldrev-old{i}.db"
+        stale.write_bytes(b"stale snapshot")
+        os.utime(stale, (1_000_000 + i, 1_000_000 + i))
+        seeded.append(stale.name)
+
+    run_migrations()
+
+    names = [p.name for p in _pre_migration_snapshots(older_rev_db)]
+    assert len(names) == 3
+    # The oldest seeded snapshot was pruned; the freshly created one is kept.
+    assert seeded[0] not in names
+    assert seeded[1] in names and seeded[2] in names
+    assert any(EARLIER_REVISION in n for n in names)
+
+
+# --- Configurable backup folder (P4.4) ------------------------------------------
+
+
+def _set_backup_folder(env, folder):
+    """Set user_settings.backup_folder directly (validation is covered in
+    test_settings.py; these tests exercise the service-level routing)."""
+    from app.routers.settings import _get_or_create
+
+    db = env.Session()
+    obj = _get_or_create(db)
+    obj.backup_folder = folder
+    db.commit()
+    db.close()
+
+
+def test_backup_to_disk_honors_configured_folder(env, tmp_path):
+    external = tmp_path / "external-drive"
+    external.mkdir()
+    _set_backup_folder(env, str(external))
+
+    dest = Path(env.client.post("/api/v1/maintenance/backup-to-disk").json()["path"])
+    assert dest.parent == external
+    assert dest.read_bytes().startswith(b"SQLite format 3\x00")
+    # The default folder beside the DB is untouched.
+    assert not (env.db_path.parent / "backups").exists()
+
+    listed = env.client.get("/api/v1/maintenance/backups").json()["backups"]
+    assert [b["name"] for b in listed] == [dest.name]
+
+
+def test_restore_from_disk_reads_configured_folder(env, tmp_path):
+    external = tmp_path / "external-restore"
+    external.mkdir()
+    _set_backup_folder(env, str(external))
+    name = Path(env.client.post("/api/v1/maintenance/backup-to-disk").json()["path"]).name
+
+    db = env.Session()
+    _add_tx(db, "AFTER CONFIGURED BACKUP", "C3")
+    db.close()
+
+    resp = env.client.post("/api/v1/maintenance/restore-from-disk", json={"name": name})
+    assert resp.status_code == 200
+
+    check = env.Session()
+    hashes = {h for (h,) in check.query(Transaction.source_hash).all()}
+    check.close()
+    assert hashes == {"A1"}
+
+
+def test_blank_configured_folder_falls_back_to_default(env):
+    _set_backup_folder(env, "   ")
+    dest = Path(env.client.post("/api/v1/maintenance/backup-to-disk").json()["path"])
+    assert dest.parent == env.db_path.parent / "backups"
+
+
+def test_backup_to_disk_unavailable_configured_folder_returns_400(env, tmp_path):
+    # The folder was valid when saved but is unusable now (here: a path
+    # component is a file — same shape as an unplugged drive). The route must
+    # answer a clear 400, not let the OSError escape as a 500.
+    blocker = tmp_path / "blocker.txt"
+    blocker.write_text("not a directory")
+    _set_backup_folder(env, str(blocker / "sub"))
+
+    resp = env.client.post("/api/v1/maintenance/backup-to-disk")
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "Could not write the backup" in detail
+    assert str(blocker / "sub") in detail
+
+
+def test_open_backup_folder_targets_default_backups_dir(env, monkeypatch):
+    revealed = {}
+
+    def fake_reveal(path):
+        revealed["path"] = path
+        return True
+
+    monkeypatch.setattr("app.routers.maintenance.reveal_in_file_manager", fake_reveal)
+    resp = env.client.post("/api/v1/maintenance/open-backup-folder")
+    assert resp.status_code == 200
+    assert resp.json() == {"opened": True, "path": str(env.db_path.parent / "backups")}
+    assert str(revealed["path"]) == str(env.db_path.parent / "backups")
+
+
+def test_open_backup_folder_honors_configured_folder(env, tmp_path, monkeypatch):
+    external = tmp_path / "external-open"
+    external.mkdir()
+    _set_backup_folder(env, str(external))
+
+    revealed = {}
+
+    def fake_reveal(path):
+        revealed["path"] = path
+        return True
+
+    monkeypatch.setattr("app.routers.maintenance.reveal_in_file_manager", fake_reveal)
+    resp = env.client.post("/api/v1/maintenance/open-backup-folder")
+    assert resp.status_code == 200
+    assert resp.json() == {"opened": True, "path": str(external)}
+    assert str(revealed["path"]) == str(external)
+
+
+def test_open_backup_folder_requires_auth(env):
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+    assert client.post("/api/v1/maintenance/open-backup-folder").status_code == 401
+
+
+def test_configured_backup_folder_missing_column_returns_none(older_rev_db):
+    # Older schemas predate the backup_folder column; the pre-migration
+    # snapshot read must fall back instead of raising — this is exactly the
+    # upgrade that adds the column.
+    from app.migrations import _configured_backup_folder
+
+    assert _configured_backup_folder(older_rev_db) is None
+
+
+def test_pre_migration_snapshot_honors_configured_folder(tmp_path, monkeypatch):
+    from app import migrations
+
+    db_path = tmp_path / "head.db"
+    monkeypatch.setattr(app_settings, "database_url", f"sqlite:///{db_path}")
+    run_migrations()  # head schema, including backup_folder
+
+    external = tmp_path / "snapshot-target"
+    external.mkdir()
+    # Configure the folder on the migration-seeded settings row, and stamp an
+    # older revision so the snapshot triggers; snapshot directly (running the
+    # full upgrade against an already-head schema is not the point).
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("UPDATE user_settings SET backup_folder = ? WHERE id = 1", (str(external),))
+    conn.execute("UPDATE alembic_version SET version_num = ?", (EARLIER_REVISION,))
+    conn.commit()
+    conn.close()
+
+    migrations._snapshot_before_migration(migrations._alembic_config())
+
+    snaps = sorted(external.glob("pre-migration-*.db"))
+    assert len(snaps) == 1
+    assert EARLIER_REVISION in snaps[0].name
+    assert not (db_path.parent / "backups").exists()
+
+
+def test_pre_migration_snapshot_falls_back_when_folder_unavailable(tmp_path, monkeypatch):
+    from app import migrations
+
+    db_path = tmp_path / "head2.db"
+    monkeypatch.setattr(app_settings, "database_url", f"sqlite:///{db_path}")
+    run_migrations()
+
+    blocker = tmp_path / "blocker.txt"
+    blocker.write_text("not a directory")
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("UPDATE user_settings SET backup_folder = ? WHERE id = 1", (str(blocker / "sub"),))
+    conn.execute("UPDATE alembic_version SET version_num = ?", (EARLIER_REVISION,))
+    conn.commit()
+    conn.close()
+
+    migrations._snapshot_before_migration(migrations._alembic_config())
+
+    # An uncreatable configured folder must not block the snapshot — it lands
+    # in the default backups/ folder beside the database instead.
+    snaps = sorted((db_path.parent / "backups").glob("pre-migration-*.db"))
+    assert len(snaps) == 1
+
+
+# --- Data-safety failure modes (P5.8) ------------------------------------------
+
+
+def test_startup_with_corrupt_db_raises_clear_error(tmp_path, monkeypatch):
+    # A corrupt .db file (garbage where a SQLite header should be) must surface
+    # as a clear RuntimeError pointing at recovery — not a raw DatabaseError
+    # traceback (and, on desktop, a blank loader window).
+    db_path = tmp_path / "corrupt.db"
+    garbage = b"this is definitely not a SQLite database file\x00\x01\x02" * 8
+    db_path.write_bytes(garbage)
+    monkeypatch.setattr(app_settings, "database_url", f"sqlite:///{db_path}")
+
+    with pytest.raises(RuntimeError) as excinfo:
+        run_migrations()
+
+    message = str(excinfo.value)
+    assert str(db_path) in message
+    assert "may be corrupted" in message
+    assert str(db_path.parent / "backups") in message
+    assert "pre-migration-*.db" in message
+
+    # The corrupt file is never modified, moved, or deleted.
+    assert db_path.exists()
+    assert db_path.read_bytes() == garbage
+
+
+def test_failed_migration_preserves_snapshot(older_rev_db, monkeypatch):
+    # Build a DB at an earlier revision, then make the upgrade itself fail
+    # mid-flight. The pre-migration snapshot (taken strictly before the upgrade)
+    # must already exist, and the live DB's revision must be untouched. This is
+    # the ordering regression guard for P0.3 — snapshot strictly before upgrade.
+    pre_upgrade_bytes = older_rev_db.read_bytes()
+
+    def boom(*_args, **_kwargs):
+        raise sqlite3.DatabaseError("disk image is malformed")
+
+    monkeypatch.setattr("alembic.command.upgrade", boom)
+
+    with pytest.raises(RuntimeError):
+        run_migrations()
+
+    snaps = _pre_migration_snapshots(older_rev_db)
+    assert len(snaps) == 1
+    assert _revision_of(snaps[0]) == EARLIER_REVISION
+    # The live DB never advanced past the earlier revision (upgrade failed)...
+    assert _revision_of(older_rev_db) == EARLIER_REVISION
+    # ...and was not mutated at all by the failed run.
+    assert older_rev_db.read_bytes() == pre_upgrade_bytes

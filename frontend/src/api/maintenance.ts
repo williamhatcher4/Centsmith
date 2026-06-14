@@ -90,4 +90,14 @@ export const maintenanceApi = {
     if (!res.ok) throw new Error(await errorMessage(res, 'Could not open the data folder'))
     return (await res.json()) as { opened: boolean; path: string }
   },
+  /**
+   * Reveal the folder backups are written to — the configured backup folder
+   * when one is set, else `backups/` beside the database. Not the same folder
+   * as `openDataFolder` once a custom backup folder is configured.
+   */
+  openBackupFolder: async (): Promise<{ opened: boolean; path: string }> => {
+    const res = await fetch('/api/v1/maintenance/open-backup-folder', { method: 'POST', credentials: 'include' })
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not open the backup folder'))
+    return (await res.json()) as { opened: boolean; path: string }
+  },
 }

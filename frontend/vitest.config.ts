@@ -20,11 +20,15 @@ export default defineConfig({
         'src/types.ts',
         'src/components/ui/**',
       ],
+      // Gates ratcheted to actual-5 (P5.2, 2026-06-12). Measured actuals:
+      // statements 80.11 / branches 73 / functions 75.91 / lines 83.07.
+      // Re-ratchet to actual-5 after any item that adds a meaningful test batch;
+      // never lower a gate to merge — shrink the change or add tests instead.
       thresholds: {
-        lines: 60,
-        functions: 55,
-        statements: 55,
-        branches: 50,
+        lines: 78,
+        functions: 70,
+        statements: 75,
+        branches: 68,
       },
     },
   },

@@ -27,6 +27,9 @@ const BACKEND_EXE_NAME: &str = "centsmith-backend.exe";
 const RUNTIME_FILE_NAME: &str = "runtime.json";
 #[cfg_attr(debug_assertions, allow(dead_code))]
 const LICENSE_FILE_NAME: &str = "license.token";
+// Last update-check outcome, written beside the database so the local backend
+// can serve it to the Settings UI (`GET /api/v1/maintenance/update-status`).
+const UPDATE_CHECK_FILE_NAME: &str = "update-check.json";
 const BOOTSTRAP_PATH: &str = "/desktop-bootstrap";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -86,6 +89,116 @@ fn read_license_token_from(dir: &Path) -> Option<String> {
         None
     } else {
         Some(trimmed.to_string())
+    }
+}
+
+/// Format an epoch-seconds timestamp as ISO-8601 UTC (e.g. `2026-06-09T08:15:00Z`)
+/// without pulling in chrono. Date math is Howard Hinnant's `civil_from_days`,
+/// exact for the whole unix era.
+fn iso8601_from_epoch(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    let (h, m, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+    let z = days + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + if month <= 2 { 1 } else { 0 };
+    format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
+}
+
+/// Scrub the license token out of a detail string before it is persisted.
+/// Updater errors echo request context (URLs, headers), so never trust them
+/// to be token-free.
+fn sanitize_update_detail(detail: &str, token: Option<&str>) -> String {
+    match token {
+        Some(t) if !t.is_empty() => detail.replace(t, "[redacted]"),
+        _ => detail.to_string(),
+    }
+}
+
+fn update_check_status_json(result: &str, detail: &str, checked_at_epoch: u64) -> String {
+    serde_json::json!({
+        "checked_at": iso8601_from_epoch(checked_at_epoch),
+        "result": result,
+        "detail": detail,
+    })
+    .to_string()
+}
+
+fn write_update_check_status_to(dir: &Path, result: &str, detail: &str) {
+    let epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let _ = fs::write(
+        dir.join(UPDATE_CHECK_FILE_NAME),
+        update_check_status_json(result, detail, epoch),
+    );
+}
+
+/// Record the outcome of an update-check attempt where the backend can serve it
+/// to Settings. `result` is one of `ok-uptodate` / `ok-update-available` /
+/// `skipped-no-license` / `error`; `detail` is sanitized so the stored license
+/// token can never land in the file.
+#[cfg_attr(debug_assertions, allow(dead_code))]
+fn record_update_check(result: &str, detail: &str) {
+    let dir = user_data_dir();
+    let detail = sanitize_update_detail(detail, read_license_token_from(&dir).as_deref());
+    write_update_check_status_to(&dir, result, &detail);
+}
+
+/// Build the script injected into the local loader page when startup fails.
+///
+/// The loader is a static page (spinner + "Starting Centsmith…"), so every
+/// failure path used to leave it spinning forever. This swaps it for a visible
+/// error: what failed, where the shell log lives, and what to try. Strings are
+/// JSON-encoded so reasons/paths (quotes, backslashes) can never break out of
+/// the script. Kept as a pure helper so it is unit-testable.
+fn startup_error_script(reason: &str, log_path: &str) -> String {
+    let reason_json =
+        serde_json::to_string(reason).unwrap_or_else(|_| "\"Startup failed.\"".to_string());
+    let log_json =
+        serde_json::to_string(log_path).unwrap_or_else(|_| "\"shell.log\"".to_string());
+    format!(
+        "(() => {{ \
+            const apply = () => {{ \
+                const spinner = document.querySelector('.spinner'); \
+                if (spinner) spinner.style.display = 'none'; \
+                const title = document.querySelector('.title'); \
+                if (title) title.textContent = 'Centsmith could not start'; \
+                const hint = document.querySelector('.hint'); \
+                if (hint) {{ \
+                    hint.style.opacity = '0.85'; \
+                    hint.style.maxWidth = '36rem'; \
+                    hint.style.textAlign = 'center'; \
+                    hint.style.lineHeight = '1.6'; \
+                    hint.style.padding = '0 24px'; \
+                    hint.textContent = {reason} + ' Details were logged to ' + {log} + '. Try restarting the app; if this keeps happening, reinstall Centsmith.'; \
+                }} \
+            }}; \
+            if (document.readyState === 'loading') {{ document.addEventListener('DOMContentLoaded', apply); }} else {{ apply(); }} \
+        }})();",
+        reason = reason_json,
+        log = log_json,
+    )
+}
+
+/// Surface a startup failure in the loader window instead of leaving the
+/// spinner forever. Best-effort: failures here are only logged.
+fn show_startup_error(app: &AppHandle, reason: &str) {
+    let log_path = user_data_dir().join("shell.log").display().to_string();
+    let script = startup_error_script(reason, &log_path);
+    match app.get_webview_window("main") {
+        None => debug_log("show_startup_error: get_webview_window returned None"),
+        Some(window) => match window.eval(&script) {
+            Ok(_) => debug_log("startup error surfaced in loader window"),
+            Err(e) => debug_log(&format!("show_startup_error eval failed: {e}")),
+        },
     }
 }
 
@@ -254,12 +367,21 @@ fn navigate_to_backend(app: AppHandle) {
             }
             Err(e) => {
                 debug_log(&format!("read_runtime_metadata error: {e}"));
+                show_startup_error(
+                    &app,
+                    "The local Centsmith service was launched but never reported it was ready \
+                     (it may have crashed or been blocked by antivirus).",
+                );
                 return;
             }
         };
 
         if let Err(e) = wait_for_port_open(metadata.port, STARTUP_TIMEOUT) {
             debug_log(&format!("wait_for_port error: {e}"));
+            show_startup_error(
+                &app,
+                "The local Centsmith service started but never began accepting connections.",
+            );
             return;
         }
         debug_log(&format!("port {} is open", metadata.port));
@@ -287,6 +409,10 @@ fn navigate_to_backend(app: AppHandle) {
                     Ok(_) => debug_log("navigate() succeeded"),
                     Err(e) => {
                         debug_log(&format!("navigate() failed: {e}"));
+                        show_startup_error(
+                            &app,
+                            "The local Centsmith service is running but the app window could not open it.",
+                        );
                     }
                 }
             }
@@ -324,6 +450,10 @@ async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
     // license stored we skip the check entirely — the app still runs fully.
     let Some(token) = read_license_token_from(&user_data_dir()) else {
         debug_log("no license token stored; skipping update check");
+        record_update_check(
+            "skipped-no-license",
+            "No license stored; update checks are disabled.",
+        );
         return Ok(());
     };
 
@@ -336,6 +466,7 @@ async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
         .await?;
     let Some(update) = update else {
         debug_log("no update available");
+        record_update_check("ok-uptodate", "");
         return Ok(());
     };
 
@@ -343,6 +474,13 @@ async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
         "update available: current={} latest={}",
         update.current_version, update.version
     ));
+    record_update_check(
+        "ok-update-available",
+        &format!(
+            "current={} latest={}",
+            update.current_version, update.version
+        ),
+    );
 
     // blocking_show() is intentional: we're already on a tokio worker thread
     // (not the main thread, which would deadlock), and treating the dialog as
@@ -401,6 +539,7 @@ fn spawn_update_check(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         if let Err(e) = check_for_update(app).await {
             debug_log(&format!("update check failed: {e}"));
+            record_update_check("error", &e.to_string());
         }
     });
 }
@@ -468,10 +607,26 @@ pub fn run() {
         })
         .setup(|app| {
             debug_log("setup() called");
-            let child = spawn_backend(&app.handle()).map_err(|e| {
-                debug_log(&format!("spawn_backend error: {e}"));
-                std::io::Error::new(std::io::ErrorKind::Other, e)
-            })?;
+            let child = match spawn_backend(&app.handle()) {
+                Ok(child) => child,
+                Err(e) => {
+                    // Keep the window alive and show the failure in it — erroring
+                    // out of setup() would tear the app down to a blank nothing
+                    // (exactly what an antivirus-quarantined backend used to do).
+                    debug_log(&format!("spawn_backend error: {e}"));
+                    let handle = app.handle().clone();
+                    thread::spawn(move || {
+                        // Give the loader page a beat to render before injecting.
+                        thread::sleep(Duration::from_millis(750));
+                        show_startup_error(
+                            &handle,
+                            "The local Centsmith service could not be launched \
+                             (it may be missing or blocked by antivirus).",
+                        );
+                    });
+                    return Ok(());
+                }
+            };
 
             #[cfg(windows)]
             if let Some(raw) = assign_to_job(&child) {
@@ -601,6 +756,77 @@ mod tests {
         let dir = tempdir().unwrap();
         fs::write(license_token_path(dir.path()), "   \n").unwrap();
         assert_eq!(read_license_token_from(dir.path()), None);
+    }
+
+    #[test]
+    fn iso8601_from_epoch_formats_known_timestamps() {
+        assert_eq!(iso8601_from_epoch(0), "1970-01-01T00:00:00Z");
+        // Leap day.
+        assert_eq!(iso8601_from_epoch(1_709_209_845), "2024-02-29T12:30:45Z");
+        assert_eq!(iso8601_from_epoch(1_750_000_000), "2025-06-15T15:06:40Z");
+        assert_eq!(iso8601_from_epoch(1_780_992_900), "2026-06-09T08:15:00Z");
+    }
+
+    #[test]
+    fn sanitize_update_detail_redacts_token_occurrences() {
+        let detail = "GET https://host/x?k=lic-SECRET failed; header Bearer lic-SECRET";
+        assert_eq!(
+            sanitize_update_detail(detail, Some("lic-SECRET")),
+            "GET https://host/x?k=[redacted] failed; header Bearer [redacted]"
+        );
+        // No token stored (or blank) leaves the detail untouched.
+        assert_eq!(sanitize_update_detail(detail, None), detail);
+        assert_eq!(sanitize_update_detail(detail, Some("")), detail);
+    }
+
+    #[test]
+    fn update_check_status_json_has_expected_shape() {
+        let raw = update_check_status_json("ok-uptodate", "", 1_780_992_900);
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(parsed["checked_at"], "2026-06-09T08:15:00Z");
+        assert_eq!(parsed["result"], "ok-uptodate");
+        assert_eq!(parsed["detail"], "");
+    }
+
+    #[test]
+    fn write_update_check_status_creates_parseable_file() {
+        let dir = tempdir().unwrap();
+        write_update_check_status_to(dir.path(), "error", "connection refused");
+        let raw = fs::read_to_string(dir.path().join(UPDATE_CHECK_FILE_NAME)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(parsed["result"], "error");
+        assert_eq!(parsed["detail"], "connection refused");
+        // checked_at is a real ISO-8601 UTC stamp.
+        let stamp = parsed["checked_at"].as_str().unwrap();
+        assert!(stamp.ends_with('Z') && stamp.len() == 20, "got {stamp}");
+    }
+
+    #[test]
+    fn startup_error_script_embeds_reason_log_location_and_recovery_steps() {
+        let script = startup_error_script(
+            "The local Centsmith service could not be launched.",
+            r"C:\Users\x\AppData\Roaming\Centsmith\shell.log",
+        );
+        assert!(script.contains("The local Centsmith service could not be launched."));
+        assert!(script.contains("shell.log"));
+        assert!(script.contains("Centsmith could not start"));
+        assert!(script.contains("Try restarting the app"));
+        assert!(script.contains("reinstall Centsmith"));
+        // Defensive: applies after DOMContentLoaded if the page is still loading.
+        assert!(script.contains("DOMContentLoaded"));
+    }
+
+    #[test]
+    fn startup_error_script_escapes_embedded_strings() {
+        let script = startup_error_script(
+            "a \"quoted\" reason\nwith newline",
+            r"C:\path\with\backslashes",
+        );
+        // JSON encoding keeps quotes/backslashes/newlines inside the literals,
+        // so a hostile-looking reason can never break out of the script.
+        assert!(script.contains(r#"\"quoted\""#));
+        assert!(script.contains(r"C:\\path\\with\\backslashes"));
+        assert!(!script.contains('\n'));
     }
 
     #[test]

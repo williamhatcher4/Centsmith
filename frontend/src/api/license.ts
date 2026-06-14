@@ -14,6 +14,18 @@ export interface LicenseStatus {
 }
 
 /**
+ * Outcome of the last auto-update check, recorded by the Rust shell into
+ * `update-check.json` beside the database and served by the local backend.
+ * `present` is false until the shell has attempted at least one check.
+ */
+export interface UpdateCheckStatus {
+  present: boolean
+  checked_at: string | null
+  result: 'ok-uptodate' | 'ok-update-available' | 'skipped-no-license' | 'error' | null
+  detail: string | null
+}
+
+/**
  * True only inside the desktop shell, where auto-update (and therefore the
  * license) is relevant. The `__TAURI__` global is reliably injected on every
  * page (`withGlobalTauri`), so it's a safe render gate — but the license
@@ -57,5 +69,10 @@ export const licenseApi = {
     const res = await fetch('/api/v1/maintenance/license', { method: 'DELETE', credentials: 'include' })
     if (!res.ok) throw new Error(await errorMessage(res, 'Could not remove license'))
     return (await res.json()) as LicenseStatus
+  },
+  getUpdateStatus: async (): Promise<UpdateCheckStatus> => {
+    const res = await fetch('/api/v1/maintenance/update-status', { credentials: 'include' })
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not read update status'))
+    return (await res.json()) as UpdateCheckStatus
   },
 }

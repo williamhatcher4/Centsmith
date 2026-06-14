@@ -30,6 +30,8 @@ const PREVIEW_PAYLOAD = {
   skipped_errors: 0,
   amount_sign_adjustable: false,
   charges_positive: false,
+  date_convention_adjustable: false,
+  day_first: false,
   skipped_rows: [],
   mapping_required: false,
   available_columns: [],
@@ -248,6 +250,99 @@ describe('ImportModal charges-positive sign toggle', () => {
     await user.click(screen.getByRole('button', { name: /Import 1/i }))
 
     await waitFor(() => expect(confirmChargesPositive).toBe('true'))
+  })
+})
+
+describe('ImportModal day-first date toggle', () => {
+  const dateAdjustablePayload = {
+    ...PREVIEW_PAYLOAD,
+    date_convention_adjustable: true,
+    day_first: false,
+  }
+
+  function readDayFirst(body: string): string | null {
+    const match = body.match(/name="day_first"[\r\n]+([^\r\n]+)/)
+    return match ? match[1].trim() : null
+  }
+
+  it('hides the day-first toggle when the file dates are unambiguous', async () => {
+    server.use(
+      http.post('/api/v1/transactions/import/preview', () => HttpResponse.json(PREVIEW_PAYLOAD)),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+    await screen.findByText(/To import/i)
+    expect(screen.queryByText(/Dates are day-first/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the toggle for ambiguous dates and re-previews with day_first when flipped', async () => {
+    let lastDayFirst: string | null = 'unset'
+    server.use(
+      http.post('/api/v1/transactions/import/preview', async ({ request }) => {
+        const df = readDayFirst(await request.text())
+        lastDayFirst = df
+        const dayFirst = df === 'true'
+        return HttpResponse.json({
+          ...dateAdjustablePayload,
+          day_first: dayFirst,
+          rows: [{ ...PREVIEW_PAYLOAD.rows[0], date: dayFirst ? '2026-01-05' : '2026-05-01' }],
+        })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+    await screen.findByText(/To import/i)
+
+    const checkbox = screen.getByRole('checkbox') as HTMLInputElement
+    expect(checkbox.checked).toBe(false)
+
+    await user.click(checkbox)
+    await waitFor(() => expect(lastDayFirst).toBe('true'))
+    // The re-previewed rows reflect the day-first reading.
+    expect(await screen.findByText('2026-01-05')).toBeInTheDocument()
+  })
+
+  it('sends the chosen date convention to confirm', async () => {
+    let confirmDayFirst: string | null = 'unset'
+    server.use(
+      http.post('/api/v1/transactions/import/preview', async ({ request }) => {
+        const df = readDayFirst(await request.text())
+        return HttpResponse.json({ ...dateAdjustablePayload, day_first: df === 'true' })
+      }),
+      http.post('/api/v1/transactions/import/confirm', async ({ request }) => {
+        confirmDayFirst = readDayFirst(await request.text())
+        return HttpResponse.json({ imported: 1, skipped: 0, ignored_credits: 0, skipped_errors: 0, batch_id: 'batch-df' })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="card" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+    await screen.findByText(/To import/i)
+
+    await user.click(screen.getByRole('checkbox'))
+    await waitFor(() => expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true))
+    await user.click(screen.getByRole('button', { name: /Import 1/i }))
+
+    await waitFor(() => expect(confirmDayFirst).toBe('true'))
+  })
+
+  it('shows the toggle for checking imports too', async () => {
+    server.use(
+      http.post('/api/v1/transactions/import/checking/preview', () => HttpResponse.json(dateAdjustablePayload)),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<ImportModal onClose={vi.fn()} mode="checking" />)
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(fileInput, buildCsvFile())
+    await screen.findByText(/To import/i)
+    expect(screen.getByText(/Dates are day-first/i)).toBeInTheDocument()
   })
 })
 

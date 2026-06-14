@@ -12,6 +12,9 @@ from app.database import Base
 # listed as negative).
 AMOUNT_CONVENTIONS: frozenset[str] = frozenset({"signed", "charges_positive", "charges_negative"})
 PROFILE_SOURCE_TYPES: frozenset[str] = frozenset({"card", "checking"})
+# Date conventions for ambiguous numeric dates: ``mdy`` reads MM/DD (US-style),
+# ``dmy`` reads DD/MM (Canadian/European). None means the default (month-first).
+DATE_CONVENTIONS: frozenset[str] = frozenset({"mdy", "dmy"})
 
 
 class ImportProfile(Base):
@@ -31,6 +34,7 @@ class ImportProfile(Base):
     debit_column: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     credit_column: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     amount_convention: Mapped[str] = mapped_column(String(20), nullable=False, default="signed")
+    date_convention: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     ignored_payment_patterns: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

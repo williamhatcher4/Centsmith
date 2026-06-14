@@ -6,7 +6,8 @@ function previewWith(detected: Record<string, number | null>, columns = 3): Impo
   return {
     rows: [], total: 0, duplicates: 0, ignored_credits: 0, to_import: 0,
     statement_format: 'Generic CSV', skipped_errors: 0, amount_sign_adjustable: false,
-    charges_positive: false, skipped_rows: [], mapping_required: true,
+    charges_positive: false, date_convention_adjustable: false, day_first: false,
+    skipped_rows: [], mapping_required: true,
     available_columns: Array.from({ length: columns }, (_, i) => `Col ${i}`),
     sample_rows: [], detected_columns: detected,
   }

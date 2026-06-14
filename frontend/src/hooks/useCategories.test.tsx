@@ -52,6 +52,24 @@ describe('useCategories', () => {
     expect(result.current.spending).not.toContain('Income')
   })
 
+  it('uses server-provided rule lists instead of the hardcoded fallbacks', async () => {
+    server.use(
+      http.get('/api/v1/settings', () =>
+        HttpResponse.json({
+          personal_categories: ['Income', 'Reimbursement', 'Transfer', 'Royalties', 'Groceries'],
+          hidden_pages: [],
+          system_categories: ['Income', 'Reimbursement', 'Transfer', 'Royalties'],
+          credit_only_categories: ['Income', 'Reimbursement', 'Royalties'],
+        }),
+      ),
+    )
+    const { result } = renderHook(() => useCategories(), { wrapper: wrap() })
+    await waitFor(() => expect(result.current.all).toContain('Royalties'))
+    expect(result.current.spending).not.toContain('Royalties')
+    expect(result.current.credit.slice(0, 3)).toEqual(['Income', 'Reimbursement', 'Royalties'])
+    expect(result.current.isSystem('Royalties')).toBe(true)
+  })
+
   it('categoriesFor returns credit list for credit transactions', async () => {
     const { result } = renderHook(() => useCategories(), { wrapper: wrap() })
     await waitFor(() => expect(result.current.all.length).toBeGreaterThan(0))

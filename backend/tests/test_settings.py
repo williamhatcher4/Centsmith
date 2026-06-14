@@ -81,6 +81,13 @@ class TestGetSettings:
         for cat in SYSTEM_CATEGORIES:
             assert cat in present, f"System category '{cat}' missing from defaults"
 
+    def test_exposes_business_rule_category_lists(self, authed_client):
+        """P1.4: the frontend reads system/credit-only categories from here
+        instead of hardcoding them."""
+        data = authed_client.get("/api/v1/settings").json()
+        assert data["system_categories"] == ["Income", "Reimbursement", "Transfer"]
+        assert data["credit_only_categories"] == ["Income", "Reimbursement"]
+
 
 # ---------------------------------------------------------------------------
 # PUT /api/v1/settings
@@ -380,3 +387,73 @@ class TestDeleteCategoryWithRelabel:
         usage = authed_client.get("/api/v1/settings/category-usage").json()
         assert "Bonus" not in usage
         assert usage["Income"] == 1
+
+
+# ---------------------------------------------------------------------------
+# backup_folder (P4.4 — configurable backup destination)
+# ---------------------------------------------------------------------------
+
+
+class TestBackupFolderSetting:
+    def _put(self, authed_client, **extra):
+        payload = {"personal_categories": list(DEFAULT_CATEGORIES), "hidden_pages": [], **extra}
+        return authed_client.put("/api/v1/settings", json=payload)
+
+    def test_defaults_to_null(self, authed_client):
+        assert authed_client.get("/api/v1/settings").json()["backup_folder"] is None
+
+    def test_valid_directory_accepted_and_persisted(self, authed_client, tmp_path):
+        folder = tmp_path / "external-backups"
+        folder.mkdir()
+        resp = self._put(authed_client, backup_folder=str(folder))
+        assert resp.status_code == 200
+        assert resp.json()["backup_folder"] == str(folder)
+        assert authed_client.get("/api/v1/settings").json()["backup_folder"] == str(folder)
+
+    def test_nonexistent_directory_rejected(self, authed_client, tmp_path):
+        resp = self._put(authed_client, backup_folder=str(tmp_path / "missing"))
+        assert resp.status_code == 400
+        assert "does not exist" in resp.json()["detail"]
+
+    def test_relative_path_rejected(self, authed_client):
+        resp = self._put(authed_client, backup_folder="relative/backups")
+        assert resp.status_code == 400
+        assert "absolute" in resp.json()["detail"]
+
+    def test_file_path_rejected(self, authed_client, tmp_path):
+        a_file = tmp_path / "not-a-dir.txt"
+        a_file.write_text("x")
+        resp = self._put(authed_client, backup_folder=str(a_file))
+        assert resp.status_code == 400
+
+    def test_omitting_field_leaves_value_unchanged(self, authed_client, tmp_path):
+        folder = tmp_path / "keepme"
+        folder.mkdir()
+        assert self._put(authed_client, backup_folder=str(folder)).status_code == 200
+        # A categories-only PUT (the Settings page flow) must not clear it.
+        resp = self._put(authed_client)
+        assert resp.status_code == 200
+        assert resp.json()["backup_folder"] == str(folder)
+
+    def test_null_clears_back_to_default(self, authed_client, tmp_path):
+        folder = tmp_path / "cleared"
+        folder.mkdir()
+        assert self._put(authed_client, backup_folder=str(folder)).status_code == 200
+        resp = self._put(authed_client, backup_folder=None)
+        assert resp.status_code == 200
+        assert resp.json()["backup_folder"] is None
+
+    def test_blank_string_clears_back_to_default(self, authed_client, tmp_path):
+        folder = tmp_path / "cleared2"
+        folder.mkdir()
+        assert self._put(authed_client, backup_folder=str(folder)).status_code == 200
+        resp = self._put(authed_client, backup_folder="   ")
+        assert resp.status_code == 200
+        assert resp.json()["backup_folder"] is None
+
+    def test_rejected_folder_does_not_change_saved_value(self, authed_client, tmp_path):
+        folder = tmp_path / "stays"
+        folder.mkdir()
+        assert self._put(authed_client, backup_folder=str(folder)).status_code == 200
+        assert self._put(authed_client, backup_folder=str(tmp_path / "nope")).status_code == 400
+        assert authed_client.get("/api/v1/settings").json()["backup_folder"] == str(folder)

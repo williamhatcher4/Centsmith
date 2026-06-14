@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.models.user_settings import UserSettings, DEFAULT_CATEGORIES, SYSTEM_CATEGORIES
+from app.models.user_settings import UserSettings
 from app.schemas.settings import UserSettingsOut, UserSettingsUpdate
+from app.services.maintenance_service import validate_backup_folder
+from app.services.transaction_rules import DEFAULT_CATEGORIES, INCOME_CATEGORIES
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -78,7 +80,7 @@ def update_settings(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="relabel_target must be one of the saved categories",
                     )
-                if relabel_target in {"Income", "Reimbursement"}:
+                if relabel_target in INCOME_CATEGORIES:
                     non_credit_count = db.query(Transaction).filter(
                         Transaction.personal_category.in_(list(in_use.keys())),
                         Transaction.transaction_type != "credit",
@@ -102,6 +104,17 @@ def update_settings(
                         "in_use": in_use,
                     },
                 )
+
+    # Only touch backup_folder when the client actually sent the field, so the
+    # categories/pages PUT flows can't silently clear a configured folder.
+    if "backup_folder" in payload.model_fields_set:
+        if payload.backup_folder is None or not payload.backup_folder.strip():
+            obj.backup_folder = None
+        else:
+            try:
+                obj.backup_folder = validate_backup_folder(payload.backup_folder)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     obj.personal_categories = new_categories_list
     obj.hidden_pages = payload.hidden_pages

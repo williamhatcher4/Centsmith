@@ -96,6 +96,8 @@ export interface ImportPreview {
   skipped_errors: number
   amount_sign_adjustable: boolean
   charges_positive: boolean
+  date_convention_adjustable: boolean
+  day_first: boolean
   skipped_rows: SkippedRow[]
   mapping_required: boolean
   available_columns: string[]
@@ -104,6 +106,7 @@ export interface ImportPreview {
 }
 
 export type AmountConvention = 'signed' | 'charges_positive' | 'charges_negative'
+export type DateConvention = 'mdy' | 'dmy'
 
 export interface ColumnMapping {
   date_column: number
@@ -112,6 +115,7 @@ export interface ColumnMapping {
   debit_column?: number | null
   credit_column?: number | null
   amount_convention: AmountConvention
+  date_convention?: DateConvention | null
 }
 
 export interface ImportProfile {
@@ -124,6 +128,7 @@ export interface ImportProfile {
   debit_column: number | null
   credit_column: number | null
   amount_convention: AmountConvention
+  date_convention: DateConvention | null
   ignored_payment_patterns: string[]
   created_at: string
   updated_at: string
@@ -138,6 +143,7 @@ export interface ImportProfilePayload {
   debit_column?: number | null
   credit_column?: number | null
   amount_convention: AmountConvention
+  date_convention?: DateConvention | null
   ignored_payment_patterns: string[]
 }
 
@@ -200,6 +206,13 @@ export interface DashboardMonth {
 export interface UserSettings {
   personal_categories: string[]
   hidden_pages: string[]
+  // Optional custom backup destination; null means the default backups/
+  // folder beside the database. Omitting it from a PUT leaves it unchanged.
+  backup_folder?: string | null
+  // Business-rule constants served by the backend (read-only; optional so PUT
+  // payloads and older mocks don't need to carry them).
+  system_categories?: string[]
+  credit_only_categories?: string[]
 }
 
 export interface MerchantSpend {
