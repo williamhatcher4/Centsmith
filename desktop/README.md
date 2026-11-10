@@ -14,8 +14,6 @@ End users do **not** need these — they just run the installer.
    bootstraps it on Windows 10 automatically.
 4. **Microsoft C++ Build Tools** — required by Rust on Windows. Installed via
    Visual Studio Build Tools (the "Desktop development with C++" workload).
-5. **Inno Setup** (only if you want the Inno Setup installer wrapper instead
-   of Tauri's bundler) — [jrsoftware.org/isinfo.php](https://jrsoftware.org/isinfo.php).
 
 ## Layout
 
