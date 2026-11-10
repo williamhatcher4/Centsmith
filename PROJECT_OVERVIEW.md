@@ -198,6 +198,40 @@ Work transactions can be marked as expensed. Only work transactions may have `ex
 
 When a transaction is changed away from `personal`, its `personal_category` is cleared. When a transaction is changed away from `work`, its `expensed` flag is cleared.
 
+## CI Toolchain Pins And Dependency Audits
+
+CI fails on audit findings and on toolchain changes even when no app code changes. Read this before you change a workflow or update dependencies.
+
+Pinned versions. Change them on purpose, and run the full CI suite after each change:
+
+- **Node 24.** `actions/setup-node` uses `node-version: "24"` in `ci.yml` and `release.yml`. Don't use `lts/*`. When `lts/*` moved to Node 26, Node's built-in Web Storage replaced jsdom's `localStorage` in Vitest. Without `--localstorage-file` it is undefined there, and 133 frontend tests failed.
+- **Ubuntu 24.04.** The Linux jobs in `ci.yml` and `update-contract.yml` use `runs-on: ubuntu-24.04`. Don't use `ubuntu-latest`. When `ubuntu-latest` moved to 26.04, Playwright 1.60 could no longer install Chromium's system libraries (`playwright install --with-deps`).
+- **Windows not pinned.** The backend job and the release job still use `windows-latest`.
+
+Local tooling:
+
+- Use Node 24 and the npm 11 that ships with it. npm 10 crashes on this dependency tree with `Cannot read properties of null (reading 'edgesOut')` during `npm audit fix` and `npm update`.
+- On Node 22, `DataDiagnosticsCard.test.tsx` › "downloads a backup in the browser build" fails. Node's `fetch` can't read jsdom's `Blob` (`object.stream is not a function`). It passes on Node 24, which is what CI uses.
+
+Dependency audits. CI runs these gates:
+
+- `pip-audit` for the backend.
+- `npm audit --audit-level=moderate` for `frontend/`.
+- `cargo audit` for `desktop/src-tauri`.
+
+`e2e/package-lock.json` is not audited.
+
+New advisories turn CI red without any code change. Fix them with targeted updates, not blanket upgrades:
+
+- **Rust:** `cargo update -p <crate>`. A plain `cargo update` touches hundreds of crates. Leave the `unmaintained`, `unsound` and `yanked` warnings; they don't fail the job.
+- **npm:** `npm audit fix` keeps updates inside the ranges in `package.json`. Avoid `npm audit fix --force`, which can apply breaking downgrades. For example, it would move ESLint 10 to 9.
+
+Current workarounds and follow-ups:
+
+- **minimatch override.** `frontend/package.json` has `"overrides": { "minimatch": "^11.0.5" }`. The advisory fix (GHSA-g3hv-75wg-m249) only exists in minimatch 11, but `eslint` 10, `@eslint/config-array` and `typescript-eslint` 8 still require `^10`. Only the lint toolchain uses minimatch. Remove the override once those packages depend on minimatch 11.
+- **Tauri bump.** Clearing the `zip` advisories required `tauri-plugin-updater` 2.14.1 (`zip` 9). That version needs `tauri` 2.12.5, up from 2.11.2. The change was verified with `cargo check`, `cargo test` and `cargo audit` on Linux only. Before the next release, build the installer on Windows and check launch, the startup handshake and the update prompt.
+- **Generated schemas.** Building the Rust shell regenerates `desktop/src-tauri/gen/schemas/*` for the host platform. Commit regenerated schemas only from a Windows build. A Linux build adds `linux-schema.json`, which doesn't belong in the repo.
+
 ## Migrations
 
 Alembic is the canonical schema migration path.

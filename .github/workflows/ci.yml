@@ -43,7 +43,7 @@ jobs:
 
   frontend:
     name: Frontend (lint + tests + build + audit)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,7 +85,7 @@ jobs:
 
   desktop:
     name: Desktop (cargo check + test + audit)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -128,7 +128,7 @@ jobs:
 
   e2e:
     name: End-to-end (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [backend, frontend]
     steps:
       - name: Checkout
@@ -183,7 +183,7 @@ jobs:
 
   quality-gate:
     name: Quality gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [backend, frontend, desktop, e2e]
     if: always()
     steps:
