@@ -16,9 +16,10 @@ The installed desktop app keeps a no-login user experience, but API access is st
 ## Stack
 
 - Backend: FastAPI, SQLAlchemy, Alembic, SQLite, Pydantic settings, Starlette sessions, bcrypt.
-- Frontend: React, Vite, TypeScript, TanStack Query, Zustand, Recharts, Tailwind CSS.
-- Desktop shell: Tauri 2, Rust, WebView2, PyInstaller backend sidecar, Inno Setup installer.
+- Frontend: React 19, Vite, TypeScript, TanStack Query, Zustand, Recharts, Tailwind CSS.
+- Desktop shell: Tauri 2, Rust, WebView2, PyInstaller backend sidecar, NSIS installer (Tauri bundler).
 - Storage: SQLite.
+- Testing: pytest, Vitest + Testing Library + MSW, Playwright, `cargo test`.
 - Money values are stored as integer cents.
 
 ## Run Modes
@@ -256,29 +257,41 @@ The initial migration can create an empty SQLite database and can also upgrade o
 
 ## Release Pipeline
 
-Signed Windows releases are built by `.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`. The source repo stays private; the workflow publishes installers and the Tauri updater manifest to the public `williamhatcher4/centsmith_releases` repo.
+Signed Windows releases are built by `.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`. Installers and update manifests are published to a private Cloudflare R2 bucket and served through a license-gated Cloudflare Worker at `https://centsmith.ca/api/updates`. The Worker lives in a separate website repo.
 
 Pipeline stages:
 
-1. Backend tests, `pip_audit`, frontend lint and audit, `cargo check`.
-2. If `WINDOWS_CERTIFICATE_BASE64` is configured, decode the PFX into the runner's temp dir and export its path; otherwise skip Authenticode signing.
-3. Inject the tag version (`vX.Y.Z`) into `desktop/src-tauri/tauri.conf.json`. The committed version stays at `0.1.0` as a sentinel — CI is the only place it's mutated.
-4. Run `packaging/build.ps1 -SkipTauri -ObfuscateBackend`. PyArmor obfuscates the sidecar, PyInstaller packs it, and `packaging/validate-release-artifacts.ps1` aborts the build if any `.env`, `.pfx`, `.p12`, `.pem`, or `.key` file — or any file named `private`, `credential`, `password`, `signing-key`, or `signing_key` — has slipped into the staged bundle.
-5. `tauri-apps/tauri-action@v0` builds the Tauri shell, invokes `packaging/sign-windows.ps1` for each produced binary when a certificate is configured, generates updater `.sig` files, and publishes the NSIS installer plus `latest.json` to the public release.
+1. **CI gate.** The workflow calls `ci.yml` as a reusable workflow, so the full suite has to pass before anything is built: backend tests and coverage, `pip-audit`, frontend lint, tests, build and audit, `cargo check`, `cargo test`, `cargo audit`, and the Playwright e2e tests.
+2. **Release notes.** The matching `## [x.y.z]` section of `CHANGELOG.md` is extracted and used as the release notes. A tag with no matching section fails the release on purpose.
+3. **Credential checks.** The workflow fails early if the Cloudflare credentials are missing.
+4. **Code-signing certificate.** If `WINDOWS_CERTIFICATE_BASE64` is configured, the PFX is decoded into the runner's temp directory. Otherwise Authenticode signing is skipped.
+5. **Version injection.** The tag version (`vX.Y.Z`) is written into `desktop/src-tauri/tauri.conf.json`. The committed version stays at `0.1.0` as a placeholder; CI is the only place it changes.
+6. **Backend bundle.** `packaging/build.ps1 -SkipTauri -ObfuscateBackend` runs. PyArmor obfuscates the sidecar and PyInstaller packs it. `packaging/validate-release-artifacts.ps1` then aborts the build if any `.env`, `.pfx`, `.p12`, `.pem` or `.key` file has slipped into the bundle, or any file named `private`, `credential`, `password`, `signing-key` or `signing_key`.
+7. **Tauri shell.** The shell is built as an NSIS installer, each binary is signed with `packaging/sign-windows.ps1` when a certificate is configured, and the updater `.sig` file is generated.
+8. **Publish to R2.** The workflow uploads:
+   - the installer
+   - `latest.json`, which feeds the website download page
+   - a per-release metadata file plus a rolling `releases.json` holding the last 20 releases
+   - `updater.json`, the Tauri updater manifest. Before upload it is checked against the updater schema, because a malformed feed would break auto-update for every install.
+9. **Feed contract test.** `packaging/update-contract-test.ps1` checks that the live feed serves the new version and the exact installer bytes through the license gate. Without `CENTSMITH_TEST_LICENSE` it only checks that unlicensed requests are rejected. `.github/workflows/update-contract.yml` runs the same test weekly to catch regressions in the Worker.
+10. **Installer smoke test.** `packaging/installer-smoke-test.ps1` installs the app on the runner, launches it, checks that `/health` responds, and uninstalls it.
 
 Auto-update at runtime:
 
-- `tauri-plugin-updater` polls `https://github.com/williamhatcher4/centsmith_releases/releases/latest/download/latest.json` once the backend is reachable. The committed minisign public key in `tauri.conf.json` verifies signatures.
-- If a newer version exists the user is prompted; on accept, NSIS runs in `passive` mode, the backend sidecar is stopped cleanly, and the app restarts.
-- Update prompt is fired from the navigate thread after `wait_for_port_open` succeeds — never before the user sees the login screen.
+- `tauri-plugin-updater` polls `https://centsmith.ca/api/updates/latest.json` once the backend is reachable. The minisign public key committed in `tauri.conf.json` verifies update signatures.
+- Updates are tied to the paid license. The shell reads `license.token` from the data directory and sends it as a bearer header. With no license stored, the update check is skipped and the app keeps working normally.
+- The result of each check is written to `update-check.json`, with the license token removed, and shown in Settings (`GET /api/v1/maintenance/update-status`).
+- If a newer version exists, the user is prompted. On accept, the installer runs in `quiet` mode, the backend sidecar is stopped cleanly, and the app restarts.
+- The update prompt is only shown after `wait_for_port_open` succeeds, so it never appears before the app has loaded.
 
 Required GitHub secrets:
 
-- `PUBLIC_RELEASES_TOKEN` — fine-grained token with contents-write on `centsmith_releases`.
-- `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — minisign keypair for updater artifacts.
-- Optional: `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` - Authenticode PFX and its password. Leave unset to publish unsigned Windows installers for now.
+- `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`: write access to the `centsmith-installers` R2 bucket.
+- `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: the minisign keypair used to sign updater artifacts.
+- Optional: `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`, the Authenticode PFX and its password. Leave them unset to publish unsigned installers.
+- Optional: `CENTSMITH_TEST_LICENSE`, a test license for the full feed contract test.
 
-For local signing on a developer workstation, prefer importing the PFX into the user's cert store once and signing via `/sha1 <thumbprint>`. `packaging/sign-windows.ps1` documents the `/p`-on-argv trade-off CI accepts when signing is enabled.
+For local signing on a developer workstation, import the PFX into the user's certificate store once and sign with `/sha1 <thumbprint>`. `packaging/sign-windows.ps1` explains the trade-off CI accepts by passing the password with `/p` on the command line.
 
 ## Important Backend Endpoints
 
@@ -330,20 +343,26 @@ Desktop and packaging:
 - `packaging/build.ps1`
 - `packaging/sign-windows.ps1`
 - `packaging/validate-release-artifacts.ps1`
-- `packaging/installer.iss`
+- `packaging/update-contract-test.ps1`
+- `packaging/installer-smoke-test.ps1`
 - `desktop/src-tauri/src/lib.rs`
 - `desktop/src-tauri/tauri.conf.json`
 - `.github/workflows/release.yml`
 
 ## Tests And Checks
 
-Backend flow tests live in:
+Backend tests live in `backend/tests/`. They cover:
 
-```text
-backend/tests/test_backend_flows.py
-```
+- auth and session requirements, login rate limiting, and the desktop token bootstrap
+- import preview and confirm, upload size limits, and parsing of a sample set of statement files in many formats (`tests/fixtures/corpus/`)
+- import profiles, cards and statement cycles, backup and restore, and reporting
+- migrations, including upgrading a database from an older released version (`test_migration_lineage.py`)
+- an OpenAPI snapshot test that catches unintended API changes
+- performance tests over a large synthetic ledger (the `perf` marker)
 
-Coverage includes auth/session requirements, login rate limiting, desktop token bootstrap, import preview/confirm behavior, upload size enforcement, migrations, classification, personal categories, dashboard data, spending data, and exports.
+pytest enforces a coverage gate (`--cov-fail-under` in `backend/pyproject.toml`). The gate is only ever raised as coverage grows, never lowered.
+
+Frontend unit and component tests use Vitest, Testing Library and MSW and sit next to the code as `*.test.ts(x)`. End-to-end tests in `e2e/tests/` use Playwright against a seeded backend.
 
 Common verification commands:
 
@@ -352,12 +371,15 @@ Common verification commands:
 .\backend\.venv\Scripts\python.exe -m alembic upgrade head
 .\backend\.venv\Scripts\python.exe -m pip_audit
 npm.cmd --prefix frontend run lint
+npm.cmd --prefix frontend run test
 npm.cmd --prefix frontend run build
 npm.cmd --prefix frontend run audit
+npm.cmd --prefix e2e test
 cargo check --manifest-path desktop\src-tauri\Cargo.toml
+cargo test --manifest-path desktop\src-tauri\Cargo.toml
 cargo audit --manifest-path desktop\src-tauri\Cargo.toml
 ```
 
-GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs backend tests, `pip-audit`, frontend lint/build/audit, `cargo check`, and `cargo audit`.
+GitHub Actions CI (`.github/workflows/ci.yml`) runs all of the above on every pull request. The release workflow also calls it as a required first step.
 
-Signed releases are produced by `.github/workflows/release.yml` — see the [Release Pipeline](#release-pipeline) section above.
+Signed releases are produced by `.github/workflows/release.yml`; see the [Release Pipeline](#release-pipeline) section above.
