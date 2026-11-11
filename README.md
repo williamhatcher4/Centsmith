@@ -6,7 +6,7 @@ A local-first Windows desktop app for importing credit card and bank statements,
 
 Everything runs on your own machine: a FastAPI backend and a React UI packaged inside a Tauri shell, with a local SQLite database. No cloud account, and your financial data never leaves your computer.
 
-![Centsmith dashboard](.github/assets/dashboard.png)
+![Centsmith dashboard](Assets/CentSmith_dashboard.png)
 
 ---
 
