@@ -9,6 +9,8 @@ auto-update dialog and on the website download feed. When cutting a release, ren
 matching section fails the release workflow on purpose, so every release ships with notes.
 
 ## [Unreleased]
+
+## [0.2.8] - 2026-11-17
 ### Changed
 - Centsmith is now free. Automatic updates no longer need a license key, and the
   License & updates card in Settings now just shows update status.

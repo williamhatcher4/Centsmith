@@ -217,7 +217,7 @@ Local tooling:
 Dependency audits. CI runs these gates:
 
 - `pip-audit` for the backend.
-- `npm audit --audit-level=moderate` for `frontend/`.
+- `npm run audit` for `frontend/` (`frontend/scripts/audit.mjs`): `npm audit` at moderate and above, minus a short allowlist of advisories that have no published fix.
 - `cargo audit` for `desktop/src-tauri`.
 
 `e2e/package-lock.json` is not audited.
@@ -230,6 +230,7 @@ New advisories turn CI red without any code change. Fix them with targeted updat
 Current workarounds and follow-ups:
 
 - **minimatch override.** `frontend/package.json` has `"overrides": { "minimatch": "^11.0.5" }`. The advisory fix (GHSA-g3hv-75wg-m249) only exists in minimatch 11, but `eslint` 10, `@eslint/config-array` and `typescript-eslint` 8 still require `^10`. Only the lint toolchain uses minimatch. Remove the override once those packages depend on minimatch 11.
+- **picomatch allowlist.** `frontend/scripts/audit.mjs` allows GHSA-fc5q-39xc-vjpf (picomatch ReDoS). Every published picomatch (`<=4.0.7`) is affected, and it only reaches the dev and build toolchain (vite, vitest, tinyglobby, typescript-eslint). When a patched picomatch ships, update to it and remove the entry. The script prints a note once the advisory is no longer reported.
 - **Tauri bump.** Clearing the `zip` advisories required `tauri-plugin-updater` 2.14.1 (`zip` 9). That version needs `tauri` 2.12.5, up from 2.11.2. The change was verified with `cargo check`, `cargo test` and `cargo audit` on Linux only. Before the next release, build the installer on Windows and check launch, the startup handshake and the update prompt.
 - **Generated schemas.** Building the Rust shell regenerates `desktop/src-tauri/gen/schemas/*` for the host platform. Commit regenerated schemas only from a Windows build. A Linux build adds `linux-schema.json`, which doesn't belong in the repo.
 
