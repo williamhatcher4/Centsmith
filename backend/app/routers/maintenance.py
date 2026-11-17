@@ -13,25 +13,19 @@ from app.services.maintenance_service import (
     backup_database,
     backups_dir,
     build_support_bundle,
-    clear_license_token,
     database_path,
-    license_status,
     list_disk_backups,
     restore_database,
     restore_from_disk,
     reveal_in_file_manager,
     update_check_status,
     write_backup_to_disk,
-    write_license_token,
 )
 
 
 class RestoreFromDiskRequest(BaseModel):
     name: str
 
-
-class LicenseTokenRequest(BaseModel):
-    token: str
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 
@@ -166,40 +160,6 @@ async def restore_backup(
     return {"status": "restored", "message": "Data restored. Reload the app to see your restored data."}
 
 
-@router.get("/license")
-def get_license(
-    _: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Whether an update license is stored, with a masked hint (never the token).
-
-    Licensing moved off Tauri IPC to the local backend: the desktop webview is
-    served from a remote origin where ``window.__TAURI__`` invoke is unreliable,
-    so the token is read/written here and lands beside the database — the same
-    file the Tauri updater reads as a bearer header.
-    """
-    return license_status(_engine(db))
-
-
-@router.post("/license")
-def set_license(
-    payload: LicenseTokenRequest,
-    _: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Store the pasted update license (blank clears it); returns masked status."""
-    return write_license_token(_engine(db), payload.token)
-
-
-@router.delete("/license")
-def delete_license(
-    _: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Remove the stored update license; returns status."""
-    return clear_license_token(_engine(db))
-
-
 @router.get("/update-status")
 def get_update_status(
     _: User = Depends(get_current_user),
@@ -208,7 +168,7 @@ def get_update_status(
     """Last auto-update check outcome, recorded by the desktop shell.
 
     The shell writes ``update-check.json`` beside the database after every
-    check attempt (sanitized — never the license token); this surfaces it so
+    check attempt; this surfaces it so
     Settings can show whether updates are flowing instead of failing silently.
     """
     return update_check_status(_engine(db))

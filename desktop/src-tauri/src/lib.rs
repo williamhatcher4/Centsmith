@@ -25,8 +25,6 @@ struct BackendJob(Mutex<Option<usize>>);
 const BACKEND_DIR_NAME: &str = "backend";
 const BACKEND_EXE_NAME: &str = "centsmith-backend.exe";
 const RUNTIME_FILE_NAME: &str = "runtime.json";
-#[cfg_attr(debug_assertions, allow(dead_code))]
-const LICENSE_FILE_NAME: &str = "license.token";
 // Last update-check outcome, written beside the database so the local backend
 // can serve it to the Settings UI (`GET /api/v1/maintenance/update-status`).
 const UPDATE_CHECK_FILE_NAME: &str = "update-check.json";
@@ -66,32 +64,6 @@ fn dirs_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-// Used by the release-only updater (`#[cfg(not(debug_assertions))]`) and tests,
-// so a plain debug build sees them as unused — allow that without hiding real
-// dead code in release.
-#[cfg_attr(debug_assertions, allow(dead_code))]
-fn license_token_path(dir: &Path) -> PathBuf {
-    dir.join(LICENSE_FILE_NAME)
-}
-
-/// Read the stored license token, returning `None` when the file is absent or
-/// blank. The token is the gate the updater attaches as a bearer header.
-///
-/// Reading/writing the token from the UI moved to the local backend
-/// (`/api/v1/maintenance/license`) because the desktop webview is served from a
-/// remote origin where Tauri IPC `invoke` is unreliable. The backend writes this
-/// same `license.token` file in the data dir, so the updater still reads it here.
-#[cfg_attr(debug_assertions, allow(dead_code))]
-fn read_license_token_from(dir: &Path) -> Option<String> {
-    let contents = fs::read_to_string(license_token_path(dir)).ok()?;
-    let trimmed = contents.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
 /// Format an epoch-seconds timestamp as ISO-8601 UTC (e.g. `2026-06-09T08:15:00Z`)
 /// without pulling in chrono. Date math is Howard Hinnant's `civil_from_days`,
 /// exact for the whole unix era.
@@ -109,16 +81,6 @@ fn iso8601_from_epoch(secs: u64) -> String {
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = yoe + era * 400 + if month <= 2 { 1 } else { 0 };
     format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
-}
-
-/// Scrub the license token out of a detail string before it is persisted.
-/// Updater errors echo request context (URLs, headers), so never trust them
-/// to be token-free.
-fn sanitize_update_detail(detail: &str, token: Option<&str>) -> String {
-    match token {
-        Some(t) if !t.is_empty() => detail.replace(t, "[redacted]"),
-        _ => detail.to_string(),
-    }
 }
 
 fn update_check_status_json(result: &str, detail: &str, checked_at_epoch: u64) -> String {
@@ -142,14 +104,10 @@ fn write_update_check_status_to(dir: &Path, result: &str, detail: &str) {
 }
 
 /// Record the outcome of an update-check attempt where the backend can serve it
-/// to Settings. `result` is one of `ok-uptodate` / `ok-update-available` /
-/// `skipped-no-license` / `error`; `detail` is sanitized so the stored license
-/// token can never land in the file.
+/// to Settings. `result` is one of `ok-uptodate` / `ok-update-available` / `error`.
 #[cfg_attr(debug_assertions, allow(dead_code))]
 fn record_update_check(result: &str, detail: &str) {
-    let dir = user_data_dir();
-    let detail = sanitize_update_detail(detail, read_license_token_from(&dir).as_deref());
-    write_update_check_status_to(&dir, result, &detail);
+    write_update_check_status_to(&user_data_dir(), result, detail);
 }
 
 /// Build the script injected into the local loader page when startup fails.
@@ -445,25 +403,9 @@ fn stop_backend(app: &AppHandle) {
 
 #[cfg(not(debug_assertions))]
 async fn check_for_update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
-    // Updates are gated by the paid license: the token is attached as a bearer
-    // header so the Worker can authorize the feed + installer download. With no
-    // license stored we skip the check entirely — the app still runs fully.
-    let Some(token) = read_license_token_from(&user_data_dir()) else {
-        debug_log("no license token stored; skipping update check");
-        record_update_check(
-            "skipped-no-license",
-            "No license stored; update checks are disabled.",
-        );
-        return Ok(());
-    };
-
+    // Updates are free: the public feed needs no license or auth header.
     debug_log("checking for updates");
-    let update = app
-        .updater_builder()
-        .header("Authorization", format!("Bearer {token}"))?
-        .build()?
-        .check()
-        .await?;
+    let update = app.updater_builder().build()?.check().await?;
     let Some(update) = update else {
         debug_log("no update available");
         record_update_check("ok-uptodate", "");
@@ -645,7 +587,7 @@ pub fn run() {
         })
         // No frontend Tauri IPC commands remain — the webview is served from the
         // local backend (a remote origin where IPC invoke is unreliable), so all
-        // shell actions (backup, open-data-folder, license) go through backend
+        // shell actions (backup, open-data-folder) go through backend
         // HTTP routes instead. The `withGlobalTauri` + capability `remote.urls`
         // are kept only so `window.__TAURI__` exists for desktop detection.
         .build(tauri::generate_context!())
@@ -739,44 +681,12 @@ mod tests {
     }
 
     #[test]
-    fn read_license_token_reads_trimmed_value() {
-        // The updater reads the token file the local backend writes. Token
-        // management itself now lives in the backend (`/maintenance/license`).
-        let dir = tempdir().unwrap();
-        assert_eq!(read_license_token_from(dir.path()), None);
-        fs::write(license_token_path(dir.path()), "  tok-ABCD1234  ").unwrap();
-        assert_eq!(
-            read_license_token_from(dir.path()),
-            Some("tok-ABCD1234".to_string())
-        );
-    }
-
-    #[test]
-    fn read_license_token_treats_blank_as_absent() {
-        let dir = tempdir().unwrap();
-        fs::write(license_token_path(dir.path()), "   \n").unwrap();
-        assert_eq!(read_license_token_from(dir.path()), None);
-    }
-
-    #[test]
     fn iso8601_from_epoch_formats_known_timestamps() {
         assert_eq!(iso8601_from_epoch(0), "1970-01-01T00:00:00Z");
         // Leap day.
         assert_eq!(iso8601_from_epoch(1_709_209_845), "2024-02-29T12:30:45Z");
         assert_eq!(iso8601_from_epoch(1_750_000_000), "2025-06-15T15:06:40Z");
         assert_eq!(iso8601_from_epoch(1_780_992_900), "2026-06-09T08:15:00Z");
-    }
-
-    #[test]
-    fn sanitize_update_detail_redacts_token_occurrences() {
-        let detail = "GET https://host/x?k=lic-SECRET failed; header Bearer lic-SECRET";
-        assert_eq!(
-            sanitize_update_detail(detail, Some("lic-SECRET")),
-            "GET https://host/x?k=[redacted] failed; header Bearer [redacted]"
-        );
-        // No token stored (or blank) leaves the detail untouched.
-        assert_eq!(sanitize_update_detail(detail, None), detail);
-        assert_eq!(sanitize_update_detail(detail, Some("")), detail);
     }
 
     #[test]

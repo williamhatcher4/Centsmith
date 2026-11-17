@@ -1150,19 +1150,6 @@
         "title": "ImportResult",
         "type": "object"
       },
-      "LicenseTokenRequest": {
-        "properties": {
-          "token": {
-            "title": "Token",
-            "type": "string"
-          }
-        },
-        "required": [
-          "token"
-        ],
-        "title": "LicenseTokenRequest",
-        "type": "object"
-      },
       "MerchantSpend": {
         "properties": {
           "amount_cents": {
@@ -2435,82 +2422,6 @@
         ]
       }
     },
-    "/api/v1/maintenance/license": {
-      "delete": {
-        "description": "Remove the stored update license; returns status.",
-        "operationId": "delete_license_api_v1_maintenance_license_delete",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Delete License",
-        "tags": [
-          "maintenance"
-        ]
-      },
-      "get": {
-        "description": "Whether an update license is stored, with a masked hint (never the token).\n\nLicensing moved off Tauri IPC to the local backend: the desktop webview is\nserved from a remote origin where ``window.__TAURI__`` invoke is unreliable,\nso the token is read/written here and lands beside the database \u2014 the same\nfile the Tauri updater reads as a bearer header.",
-        "operationId": "get_license_api_v1_maintenance_license_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Get License",
-        "tags": [
-          "maintenance"
-        ]
-      },
-      "post": {
-        "description": "Store the pasted update license (blank clears it); returns masked status.",
-        "operationId": "set_license_api_v1_maintenance_license_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LicenseTokenRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set License",
-        "tags": [
-          "maintenance"
-        ]
-      }
-    },
     "/api/v1/maintenance/open-backup-folder": {
       "post": {
         "description": "Reveal the backup folder in the OS file manager.\n\nDistinct from the data folder: with a configured ``backup_folder`` the two\ndiffer, and the backup-saved toast must open where the file actually went.",
@@ -2650,7 +2561,7 @@
     },
     "/api/v1/maintenance/update-status": {
       "get": {
-        "description": "Last auto-update check outcome, recorded by the desktop shell.\n\nThe shell writes ``update-check.json`` beside the database after every\ncheck attempt (sanitized \u2014 never the license token); this surfaces it so\nSettings can show whether updates are flowing instead of failing silently.",
+        "description": "Last auto-update check outcome, recorded by the desktop shell.\n\nThe shell writes ``update-check.json`` beside the database after every\ncheck attempt; this surfaces it so\nSettings can show whether updates are flowing instead of failing silently.",
         "operationId": "get_update_status_api_v1_maintenance_update_status_get",
         "responses": {
           "200": {

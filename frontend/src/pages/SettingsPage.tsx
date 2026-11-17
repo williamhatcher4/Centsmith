@@ -10,8 +10,8 @@ import { invalidateAnalytics, invalidateLedger } from '../utils/queryInvalidatio
 import { SYSTEM_CATEGORIES } from '../hooks/useCategories'
 import { HIDEABLE_NAV_LINKS } from '../constants/nav'
 import { DataDiagnosticsCard } from '../components/DataDiagnosticsCard'
-import { LicenseUpdatesCard } from '../components/LicenseUpdatesCard'
-import { licenseApi } from '../api/license'
+import { UpdatesCard } from '../components/UpdatesCard'
+import { updatesApi } from '../api/updates'
 
 
 interface CategoryRowProps {
@@ -474,7 +474,7 @@ export function SettingsPage() {
           </Button>
         </div>
       </Card>
-      {licenseApi.isDesktop() && <LicenseUpdatesCard />}
+      {updatesApi.isDesktop() && <UpdatesCard />}
       <DataDiagnosticsCard />
       {deleteState && (
         <DeleteCategoryModal
