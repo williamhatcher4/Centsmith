@@ -1,7 +1,7 @@
-name: Update Worker contract
+name: Update feed contract
 
-# Live contract test for the license-gated auto-update Worker (plan item P5.3).
-# The Worker lives in the separate Centsmith_website repo; a regression there
+# Live contract test for the public auto-update feed (plan item P5.3).
+# The feed lives in the separate Centsmith_website repo; a regression there
 # silently breaks the updater for every installed app. The red workflow badge is
 # the alert channel — no extra notification plumbing.
 
@@ -24,16 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run update Worker contract test
+      - name: Run update feed contract test
         shell: pwsh
-        env:
-          CENTSMITH_TEST_LICENSE: ${{ secrets.CENTSMITH_TEST_LICENSE }}
         run: |
-          $params = @{ BaseUrl = "${{ env.UPDATER_BASE_URL }}" }
-          if (-not [string]::IsNullOrWhiteSpace($env:CENTSMITH_TEST_LICENSE)) {
-            $params.License = $env:CENTSMITH_TEST_LICENSE
-            Write-Host "::notice::Running full contract (rejection + licensed manifest) checks."
-          } else {
-            Write-Host "::notice::CENTSMITH_TEST_LICENSE not set; running rejection-only checks (steps 1-3)."
-          }
-          & .\packaging\update-contract-test.ps1 @params
+          & .\packaging\update-contract-test.ps1 -BaseUrl "${{ env.UPDATER_BASE_URL }}"

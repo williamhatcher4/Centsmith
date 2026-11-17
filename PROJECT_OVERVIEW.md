@@ -217,7 +217,7 @@ Local tooling:
 Dependency audits. CI runs these gates:
 
 - `pip-audit` for the backend.
-- `npm audit --audit-level=moderate` for `frontend/`.
+- `npm run audit` for `frontend/` (`frontend/scripts/audit.mjs`): `npm audit` at moderate and above, minus a short allowlist of advisories that have no published fix.
 - `cargo audit` for `desktop/src-tauri`.
 
 `e2e/package-lock.json` is not audited.
@@ -230,6 +230,7 @@ New advisories turn CI red without any code change. Fix them with targeted updat
 Current workarounds and follow-ups:
 
 - **minimatch override.** `frontend/package.json` has `"overrides": { "minimatch": "^11.0.5" }`. The advisory fix (GHSA-g3hv-75wg-m249) only exists in minimatch 11, but `eslint` 10, `@eslint/config-array` and `typescript-eslint` 8 still require `^10`. Only the lint toolchain uses minimatch. Remove the override once those packages depend on minimatch 11.
+- **picomatch allowlist.** `frontend/scripts/audit.mjs` allows GHSA-fc5q-39xc-vjpf (picomatch ReDoS). Every published picomatch (`<=4.0.7`) is affected, and it only reaches the dev and build toolchain (vite, vitest, tinyglobby, typescript-eslint). When a patched picomatch ships, update to it and remove the entry. The script prints a note once the advisory is no longer reported.
 - **Tauri bump.** Clearing the `zip` advisories required `tauri-plugin-updater` 2.14.1 (`zip` 9). That version needs `tauri` 2.12.5, up from 2.11.2. The change was verified with `cargo check`, `cargo test` and `cargo audit` on Linux only. Before the next release, build the installer on Windows and check launch, the startup handshake and the update prompt.
 - **Generated schemas.** Building the Rust shell regenerates `desktop/src-tauri/gen/schemas/*` for the host platform. Commit regenerated schemas only from a Windows build. A Linux build adds `linux-schema.json`, which doesn't belong in the repo.
 
@@ -257,7 +258,7 @@ The initial migration can create an empty SQLite database and can also upgrade o
 
 ## Release Pipeline
 
-Signed Windows releases are built by `.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`. Installers and update manifests are published to a private Cloudflare R2 bucket and served through a license-gated Cloudflare Worker at `https://centsmith.ca/api/updates`. The Worker lives in a separate website repo.
+Signed Windows releases are built by `.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`. Installers and update manifests are published to a Cloudflare R2 bucket and served publicly by the website at `https://centsmith.ca/api/updates` (feed) and `https://centsmith.ca/api/download/<installer>`. Centsmith is free, so no license is needed. The website lives in a separate repo.
 
 Pipeline stages:
 
@@ -273,14 +274,14 @@ Pipeline stages:
    - `latest.json`, which feeds the website download page
    - a per-release metadata file plus a rolling `releases.json` holding the last 20 releases
    - `updater.json`, the Tauri updater manifest. Before upload it is checked against the updater schema, because a malformed feed would break auto-update for every install.
-9. **Feed contract test.** `packaging/update-contract-test.ps1` checks that the live feed serves the new version and the exact installer bytes through the license gate. Without `CENTSMITH_TEST_LICENSE` it only checks that unlicensed requests are rejected. `.github/workflows/update-contract.yml` runs the same test weekly to catch regressions in the Worker.
+9. **Feed contract test.** `packaging/update-contract-test.ps1` checks that the live public feed serves the new version and the exact installer bytes. `.github/workflows/update-contract.yml` runs the same test weekly to catch regressions on the website.
 10. **Installer smoke test.** `packaging/installer-smoke-test.ps1` installs the app on the runner, launches it, checks that `/health` responds, and uninstalls it.
 
 Auto-update at runtime:
 
 - `tauri-plugin-updater` polls `https://centsmith.ca/api/updates/latest.json` once the backend is reachable. The minisign public key committed in `tauri.conf.json` verifies update signatures.
-- Updates are tied to the paid license. The shell reads `license.token` from the data directory and sends it as a bearer header. With no license stored, the update check is skipped and the app keeps working normally.
-- The result of each check is written to `update-check.json`, with the license token removed, and shown in Settings (`GET /api/v1/maintenance/update-status`).
+- Updates are free and need no license or account. If the check fails (for example, offline), the app keeps working normally.
+- The result of each check is written to `update-check.json` and shown in Settings (`GET /api/v1/maintenance/update-status`).
 - If a newer version exists, the user is prompted. On accept, the installer runs in `quiet` mode, the backend sidecar is stopped cleanly, and the app restarts.
 - The update prompt is only shown after `wait_for_port_open` succeeds, so it never appears before the app has loaded.
 
@@ -289,7 +290,6 @@ Required GitHub secrets:
 - `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`: write access to the `centsmith-installers` R2 bucket.
 - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: the minisign keypair used to sign updater artifacts.
 - Optional: `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`, the Authenticode PFX and its password. Leave them unset to publish unsigned installers.
-- Optional: `CENTSMITH_TEST_LICENSE`, a test license for the full feed contract test.
 
 For local signing on a developer workstation, import the PFX into the user's certificate store once and sign with `/sha1 <thumbprint>`. `packaging/sign-windows.ps1` explains the trade-off CI accepts by passing the password with `/p` on the command line.
 

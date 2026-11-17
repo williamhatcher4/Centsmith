@@ -8,6 +8,14 @@ auto-update dialog and on the website download feed. When cutting a release, ren
 `## [x.y.z] - YYYY-MM-DD` and add a fresh empty `[Unreleased]` section above it. A release with no
 matching section fails the release workflow on purpose, so every release ships with notes.
 
+## [Unreleased]
+
+## [0.2.8] - 2026-11-17
+### Changed
+- Centsmith is now free. Automatic updates no longer need a license key, and the
+  License & updates card in Settings now just shows update status.
+- The source code is now available under the MIT License.
+
 ## [0.2.7] - 2026-06-13
 ### Added
 - Edit the amount and debit/credit type of manually added transactions (imported

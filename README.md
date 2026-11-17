@@ -116,6 +116,4 @@ Your data lives in `%APPDATA%\Centsmith\centsmith.db`. Uninstalling leaves this 
 
 ## License
 
-Copyright © 2026 William Hatcher. All rights reserved.
-
-The source code is published for viewing and evaluation only. You may not copy, modify, distribute, or use this code without written permission.
+Centsmith is free. The source code is released under the [MIT License](LICENSE).
