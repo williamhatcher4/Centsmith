@@ -51,7 +51,14 @@ function Get-HttpStatus {
         MaximumRedirection = 0
         ErrorAction        = "Stop"
     }
-    if ($OutFile) { $args.OutFile = $OutFile }
+    # -OutFile writes the body to disk; without -PassThru, PowerShell 7 returns
+    # nothing from Invoke-WebRequest, leaving $resp null (and $resp.Headers a
+    # method call on null). -PassThru makes it return the response object too, so
+    # the status/headers stay assertable while the body still lands in the file.
+    if ($OutFile) {
+        $args.OutFile = $OutFile
+        $args.PassThru = $true
+    }
     try {
         $resp = Invoke-WebRequest @args
         $contentType = $null
