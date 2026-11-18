@@ -51,8 +51,8 @@ Build the installer from the repo root:
 # Local installer (PyInstaller backend, unsigned):
 ./packaging/build.ps1
 
-# Release backend bundle (PyArmor-obfuscated, only useful with CI signing):
-./packaging/build.ps1 -SkipTauri -ObfuscateBackend
+# Release backend bundle only (staged into Tauri resources, no installer):
+./packaging/build.ps1 -SkipTauri
 ```
 
 ### Developer Mode
@@ -267,7 +267,7 @@ Pipeline stages:
 3. **Credential checks.** The workflow fails early if the Cloudflare credentials are missing.
 4. **Code-signing certificate.** If `WINDOWS_CERTIFICATE_BASE64` is configured, the PFX is decoded into the runner's temp directory. Otherwise Authenticode signing is skipped.
 5. **Version injection.** The tag version (`vX.Y.Z`) is written into `desktop/src-tauri/tauri.conf.json`. The committed version stays at `0.1.0` as a placeholder; CI is the only place it changes.
-6. **Backend bundle.** `packaging/build.ps1 -SkipTauri -ObfuscateBackend` runs. PyArmor obfuscates the sidecar and PyInstaller packs it. `packaging/validate-release-artifacts.ps1` then aborts the build if any `.env`, `.pfx`, `.p12`, `.pem` or `.key` file has slipped into the bundle, or any file named `private`, `credential`, `password`, `signing-key` or `signing_key`.
+6. **Backend bundle.** `packaging/build.ps1 -SkipTauri` runs. PyInstaller packs the sidecar. `packaging/validate-release-artifacts.ps1` then aborts the build if any `.env`, `.pfx`, `.p12`, `.pem` or `.key` file has slipped into the bundle, or any file named `private`, `credential`, `password`, `signing-key` or `signing_key`.
 7. **Tauri shell.** The shell is built as an NSIS installer, each binary is signed with `packaging/sign-windows.ps1` when a certificate is configured, and the updater `.sig` file is generated.
 8. **Publish to R2.** The workflow uploads:
    - the installer

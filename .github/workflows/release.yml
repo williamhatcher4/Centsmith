@@ -121,10 +121,10 @@ jobs:
           $conf.version = $version
           $conf | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $confPath -Encoding utf8
 
-      - name: Build obfuscated backend resources
+      - name: Build backend resources
         env:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: .\packaging\build.ps1 -SkipTauri -ObfuscateBackend
+        run: .\packaging\build.ps1 -SkipTauri
 
       - name: Verify Windows signing command
         env:
