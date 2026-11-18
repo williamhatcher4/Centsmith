@@ -51,11 +51,13 @@ function Get-HttpStatus {
         MaximumRedirection = 0
         ErrorAction        = "Stop"
     }
-    if ($OutFile) { $args.OutFile = $OutFile }
+    # -OutFile alone makes Invoke-WebRequest return nothing; -PassThru keeps the
+    # response object so the status code is still assertable.
+    if ($OutFile) { $args.OutFile = $OutFile; $args.PassThru = $true }
     try {
         $resp = Invoke-WebRequest @args
         $contentType = $null
-        if ($resp.Headers.ContainsKey("Content-Type")) { $contentType = [string]$resp.Headers["Content-Type"] }
+        if ($null -ne $resp.Headers -and $resp.Headers.ContainsKey("Content-Type")) { $contentType = [string]$resp.Headers["Content-Type"] }
         return [pscustomobject]@{
             StatusCode  = [int]$resp.StatusCode
             ContentType = $contentType
