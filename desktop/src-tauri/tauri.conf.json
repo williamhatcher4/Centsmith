@@ -42,21 +42,7 @@
     ],
     "publisher": "William Hatcher",
     "copyright": "Copyright © 2026",
-    "category": "Finance",
-    "windows": {
-      "signCommand": {
-        "cmd": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-        "args": [
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-File",
-          "../../packaging/sign-windows.ps1",
-          "-FilePath",
-          "%1"
-        ]
-      }
-    }
+    "category": "Finance"
   },
   "plugins": {
     "updater": {

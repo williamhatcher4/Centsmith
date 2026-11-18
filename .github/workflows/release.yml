@@ -13,11 +13,20 @@ on:
 
 permissions:
   contents: read
+  # SignPath's connector reads this run's job details and downloads the
+  # unsigned artifacts with the workflow token.
+  actions: read
 
 env:
   RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
   R2_BUCKET: centsmith-installers
   R2_PREFIX: installers
+  # Authenticode signing via SignPath (free OSS certificate from SignPath
+  # Foundation). The organization id is a repository variable; the slugs
+  # default to the names in PROJECT_OVERVIEW.md's signing setup.
+  SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+  SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG || 'centsmith' }}
+  SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
   # Base URL of the public update feed (in the Centsmith_website repo).
   # The app's updater endpoint in tauri.conf.json must match this base + /latest.json.
   UPDATER_BASE_URL: https://centsmith.ca/api/updates
@@ -66,6 +75,21 @@ jobs:
             throw "CLOUDFLARE_ACCOUNT_ID secret is missing. Add the Cloudflare account id that owns the centsmith-installers R2 bucket."
           }
 
+      - name: Validate SignPath signing configuration
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          # Releases are always signed: Smart App Control blocks unsigned builds,
+          # so a missing signing setup must fail here, before anything is built
+          # or published, rather than ship an installer that won't start.
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) {
+            throw "SIGNPATH_API_TOKEN secret is missing. Add a SignPath API token for a submitter on the Centsmith project (see PROJECT_OVERVIEW.md, Code signing)."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID)) {
+            throw "SIGNPATH_ORGANIZATION_ID repository variable is missing. Add your SignPath organization id (see PROJECT_OVERVIEW.md, Code signing)."
+          }
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -96,18 +120,6 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
-      - name: Decode Windows signing certificate
-        env:
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
-            Write-Host "WINDOWS_CERTIFICATE_BASE64 secret is not configured; Windows Authenticode signing will be skipped."
-            exit 0
-          }
-          $certPath = Join-Path $env:RUNNER_TEMP "centsmith-code-signing.pfx"
-          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
-          "WINDOWS_CERTIFICATE_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append
-
       - name: Sync tauri.conf.json version to release tag
         shell: pwsh
         run: |
@@ -120,37 +132,144 @@ jobs:
           $conf = Get-Content -Raw -LiteralPath $confPath | ConvertFrom-Json
           $conf.version = $version
           $conf | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $confPath -Encoding utf8
+          # x.y.z without the "v", for SignPath's version parameter and the
+          # updater signature.
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build backend resources
-        env:
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: .\packaging\build.ps1 -SkipTauri
 
-      - name: Verify Windows signing command
-        env:
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          WINDOWS_CERTIFICATE_PATH: ${{ env.WINDOWS_CERTIFICATE_PATH }}
-        run: |
-          $backendExe = Get-ChildItem -Path "desktop\src-tauri\resources\backend" -Recurse -Filter "*.exe" |
-            Select-Object -First 1
-          if (-not $backendExe) {
-            throw "No staged backend executable found to verify the signing command."
-          }
-          & "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" `
-            -NoProfile `
-            -ExecutionPolicy Bypass `
-            -File ".\packaging\sign-windows.ps1" `
-            -FilePath $backendExe.FullName
+      # --- Signing ---------------------------------------------------------------
+      # Smart App Control only runs binaries that are signed (or already known to
+      # Microsoft). SignPath signs remotely and every request waits for a manual
+      # approval in SignPath, so signing can't run inside `cargo tauri build`.
+      # Instead: build the shell exe without bundling, sign it together with the
+      # backend exe, bundle the installer from those signed files, then sign the
+      # installer. That's two approvals per release.
 
-      - name: Build Tauri release bundle
+      - name: Build Tauri app executable (no installer yet)
+        shell: pwsh
+        working-directory: desktop/src-tauri
+        run: |
+          cargo tauri build --no-bundle
+          if ($LASTEXITCODE -ne 0) { throw "cargo tauri build --no-bundle failed" }
+
+      - name: Stage app binaries for signing
+        shell: pwsh
+        run: |
+          # Layout must match packaging/signpath/app-binaries.xml.
+          $stage = Join-Path $env:RUNNER_TEMP "signpath-app-unsigned"
+          New-Item -ItemType Directory -Force -Path (Join-Path $stage "backend") | Out-Null
+          Copy-Item -LiteralPath "desktop\src-tauri\target\release\centsmith.exe" -Destination $stage
+          Copy-Item -LiteralPath "desktop\src-tauri\resources\backend\centsmith-backend.exe" -Destination (Join-Path $stage "backend")
+
+      - name: Upload unsigned app binaries
+        id: upload-unsigned-app
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-app-binaries
+          path: ${{ runner.temp }}/signpath-app-unsigned
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign app binaries (SignPath; approve in SignPath)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: app-binaries
+          github-artifact-id: ${{ steps.upload-unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          # Leaves an hour to approve the request in SignPath.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ${{ runner.temp }}/signpath-app-signed
+          parameters: |
+            version: ${{ toJSON(env.APP_VERSION) }}
+
+      - name: Put signed app binaries back in place
+        shell: pwsh
+        run: |
+          $signed = Join-Path $env:RUNNER_TEMP "signpath-app-signed"
+          Copy-Item -Force -LiteralPath (Join-Path $signed "centsmith.exe") -Destination "desktop\src-tauri\target\release\centsmith.exe"
+          Copy-Item -Force -LiteralPath (Join-Path $signed "backend\centsmith-backend.exe") -Destination "desktop\src-tauri\resources\backend\centsmith-backend.exe"
+          & .\packaging\verify-authenticode.ps1 -Path @(
+            "desktop\src-tauri\target\release\centsmith.exe",
+            "desktop\src-tauri\resources\backend\centsmith-backend.exe"
+          )
+
+      - name: Bundle NSIS installer from the signed binaries
         shell: pwsh
         working-directory: desktop/src-tauri
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          WINDOWS_CERTIFICATE_PATH: ${{ env.WINDOWS_CERTIFICATE_PATH }}
-        run: cargo tauri build
+        run: |
+          # --no-binary-patching: bundling otherwise rewrites centsmith.exe in
+          # place with bundle-type info, which would break the signature just
+          # applied. Centsmith ships a single bundle type (NSIS), so the updater
+          # uses the generic windows-x86_64 manifest entry and loses nothing.
+          cargo tauri bundle --bundles nsis --no-binary-patching
+          if ($LASTEXITCODE -ne 0) { throw "cargo tauri bundle failed" }
+          & ..\..\packaging\verify-authenticode.ps1 -Path "target\release\centsmith.exe"
+
+      - name: Stage installer for signing
+        shell: pwsh
+        run: |
+          $bundleDir = "desktop\src-tauri\target\release\bundle\nsis"
+          $expected = "Centsmith_$($env:APP_VERSION)_x64-setup.exe"
+          $installer = Join-Path $bundleDir $expected
+          if (-not (Test-Path -LiteralPath $installer)) {
+            $found = (Get-ChildItem -LiteralPath $bundleDir -Filter "*.exe" | ForEach-Object Name) -join ", "
+            throw "Expected installer $expected in $bundleDir (packaging/signpath/installer.xml matches this name); found: $found"
+          }
+          $stage = Join-Path $env:RUNNER_TEMP "signpath-installer-unsigned"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item -LiteralPath $installer -Destination $stage
+
+      - name: Upload unsigned installer
+        id: upload-unsigned-installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-installer
+          path: ${{ runner.temp }}/signpath-installer-unsigned
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign installer (SignPath; approve in SignPath)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ${{ runner.temp }}/signpath-installer-signed
+          parameters: |
+            version: ${{ toJSON(env.APP_VERSION) }}
+
+      - name: Put signed installer back and re-sign updater artifact
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $name = "Centsmith_$($env:APP_VERSION)_x64-setup.exe"
+          $installer = Join-Path "desktop\src-tauri\target\release\bundle\nsis" $name
+          Copy-Item -Force -LiteralPath (Join-Path $env:RUNNER_TEMP "signpath-installer-signed\$name") -Destination $installer
+          & .\packaging\verify-authenticode.ps1 -Path $installer
+
+          # The updater .sig from bundling covers the unsigned installer bytes;
+          # Authenticode signing changed them, so sign the final file again.
+          $sigPath = "$installer.sig"
+          Remove-Item -LiteralPath $sigPath -ErrorAction SilentlyContinue
+          cargo tauri signer sign --app-version $env:APP_VERSION $installer
+          if ($LASTEXITCODE -ne 0) { throw "cargo tauri signer sign failed" }
+          if (-not (Test-Path -LiteralPath $sigPath)) { throw "Updater signature was not written to $sigPath" }
 
       - name: Upload release artifacts to R2
         shell: pwsh

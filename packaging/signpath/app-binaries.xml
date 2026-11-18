@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "app-binaries" (paste into SignPath under the
+  Centsmith project with this exact slug).
+
+  Signs only the two executables built from this repository's source: the
+  Tauri shell and the PyInstaller backend launcher. Third-party Python
+  libraries in the backend bundle (.pyd/.dll) are deliberately NOT signed:
+  SignPath Foundation's terms allow shipping upstream binaries unsigned but
+  forbid signing them with the project's certificate.
+
+  The release workflow uploads a ZIP laid out as:
+    centsmith.exe
+    backend/centsmith-backend.exe
+  and passes the release version (x.y.z) as the "version" parameter. Both
+  files must carry ProductName=Centsmith and ProductVersion=<version>; Tauri
+  embeds these in centsmith.exe and packaging/backend.spec embeds them in
+  centsmith-backend.exe.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="centsmith.exe" product-name="Centsmith" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="backend/centsmith-backend.exe" product-name="Centsmith" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

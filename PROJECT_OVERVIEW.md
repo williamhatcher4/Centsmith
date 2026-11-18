@@ -264,11 +264,11 @@ Pipeline stages:
 
 1. **CI gate.** The workflow calls `ci.yml` as a reusable workflow, so the full suite has to pass before anything is built: backend tests and coverage, `pip-audit`, frontend lint, tests, build and audit, `cargo check`, `cargo test`, `cargo audit`, and the Playwright e2e tests.
 2. **Release notes.** The matching `## [x.y.z]` section of `CHANGELOG.md` is extracted and used as the release notes. A tag with no matching section fails the release on purpose.
-3. **Credential checks.** The workflow fails early if the Cloudflare credentials are missing.
-4. **Code-signing certificate.** If `WINDOWS_CERTIFICATE_BASE64` is configured, the PFX is decoded into the runner's temp directory. Otherwise Authenticode signing is skipped.
-5. **Version injection.** The tag version (`vX.Y.Z`) is written into `desktop/src-tauri/tauri.conf.json`. The committed version stays at `0.1.0` as a placeholder; CI is the only place it changes.
-6. **Backend bundle.** `packaging/build.ps1 -SkipTauri` runs. PyInstaller packs the sidecar. `packaging/validate-release-artifacts.ps1` then aborts the build if any `.env`, `.pfx`, `.p12`, `.pem` or `.key` file has slipped into the bundle, or any file named `private`, `credential`, `password`, `signing-key` or `signing_key`.
-7. **Tauri shell.** The shell is built as an NSIS installer, each binary is signed with `packaging/sign-windows.ps1` when a certificate is configured, and the updater `.sig` file is generated.
+3. **Credential checks.** The workflow fails early if the Cloudflare credentials or the SignPath configuration are missing. Releases are never published unsigned.
+4. **Version injection.** The tag version (`vX.Y.Z`) is written into `desktop/src-tauri/tauri.conf.json`. The committed version stays at `0.1.0` as a placeholder; CI is the only place it changes. `packaging/backend.spec` reads the same file to give `centsmith-backend.exe` a matching ProductName and ProductVersion.
+5. **Backend bundle.** `packaging/build.ps1 -SkipTauri` runs. PyInstaller packs the sidecar. `packaging/validate-release-artifacts.ps1` then aborts the build if any `.env`, `.pfx`, `.p12`, `.pem` or `.key` file has slipped into the bundle, or any file named `private`, `credential`, `password`, `signing-key` or `signing_key`.
+6. **Sign the app binaries.** `cargo tauri build --no-bundle` builds `centsmith.exe`. It and `centsmith-backend.exe` go to SignPath (artifact configuration `app-binaries`), wait for approval, and come back Authenticode-signed. `packaging/verify-authenticode.ps1` checks both.
+7. **Bundle and sign the installer.** `cargo tauri bundle --bundles nsis --no-binary-patching` packs the signed binaries into the NSIS installer without rewriting `centsmith.exe`. The installer goes to SignPath (artifact configuration `installer`) for a second approval. The updater `.sig` is then regenerated with `cargo tauri signer sign`, because Authenticode signing changes the installer's bytes.
 8. **Publish to R2.** The workflow uploads:
    - the installer
    - `latest.json`, which feeds the website download page
@@ -289,9 +289,31 @@ Required GitHub secrets:
 
 - `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`: write access to the `centsmith-installers` R2 bucket.
 - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: the minisign keypair used to sign updater artifacts.
-- Optional: `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`, the Authenticode PFX and its password. Leave them unset to publish unsigned installers.
+- `SIGNPATH_API_TOKEN`: API token of a SignPath user with submitter rights on the Centsmith project.
 
-For local signing on a developer workstation, import the PFX into the user's certificate store once and sign with `/sha1 <thumbprint>`. `packaging/sign-windows.ps1` explains the trade-off CI accepts by passing the password with `/p` on the command line.
+Required GitHub repository variables (Settings → Secrets and variables → Actions → Variables):
+
+- `SIGNPATH_ORGANIZATION_ID`: the SignPath organization id.
+- Optional: `SIGNPATH_PROJECT_SLUG` (default `centsmith`) and `SIGNPATH_SIGNING_POLICY_SLUG` (default `release-signing`), if the SignPath project or policy uses other slugs.
+
+### Code signing
+
+Windows releases are Authenticode-signed through [SignPath.io](https://signpath.io), using a free open-source certificate issued to SignPath Foundation. Signed releases show "SignPath Foundation" as the publisher. Signing is required because Windows Smart App Control blocks unsigned apps it doesn't already know, and gives users no way to allow a single app.
+
+What gets signed: `centsmith.exe`, `centsmith-backend.exe` and the NSIS installer, the binaries built from this repository. Third-party Python libraries in the backend bundle (`.pyd`/`.dll`) are not signed. SignPath Foundation's terms forbid signing upstream code with the project's certificate, though they may ship unsigned inside a signed package. PyInstaller copies them byte-for-byte from their published wheels (UPX is off), which gives Windows the best chance of already recognizing them.
+
+One-time SignPath setup, after the project is accepted at [signpath.org/apply](https://signpath.org/apply):
+
+1. In SignPath, add the predefined trusted build system **GitHub.com** to the organization and link it to the project.
+2. Create the project with slug `centsmith` and a release signing policy with slug `release-signing`, using the SignPath Foundation certificate.
+3. Add two artifact configurations with the XML from `packaging/signpath/`: slug `app-binaries` (`app-binaries.xml`) and slug `installer` (`installer.xml`).
+4. Create an API token for a submitter, save it as the `SIGNPATH_API_TOKEN` secret, and save the organization id as the `SIGNPATH_ORGANIZATION_ID` variable.
+
+Each release then waits for two approvals in SignPath (app binaries, then installer). Each signing step waits up to an hour.
+
+Known gap: the NSIS uninstaller (`uninstall.exe`) is generated during bundling and can't be signed remotely, so it ships unsigned. Check uninstalling on a Smart App Control machine after the first signed release.
+
+Local builds (`./packaging/build.ps1`) are unsigned, which is fine for development but not for distribution.
 
 ## Important Backend Endpoints
 
@@ -341,7 +363,8 @@ Desktop and packaging:
 - `packaging/backend_entry.py`
 - `packaging/backend.spec`
 - `packaging/build.ps1`
-- `packaging/sign-windows.ps1`
+- `packaging/verify-authenticode.ps1`
+- `packaging/signpath/` (SignPath artifact configurations)
 - `packaging/validate-release-artifacts.ps1`
 - `packaging/update-contract-test.ps1`
 - `packaging/installer-smoke-test.ps1`

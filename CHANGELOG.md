@@ -9,6 +9,11 @@ auto-update dialog and on the website download feed. When cutting a release, ren
 matching section fails the release workflow on purpose, so every release ships with notes.
 
 ## [Unreleased]
+### Fixed
+- Centsmith now starts on Windows PCs with Smart App Control turned on. The app,
+  its background service, and the installer are now code-signed (free code
+  signing provided by SignPath.io, certificate by SignPath Foundation), so
+  Windows can verify where they came from instead of blocking them.
 
 ## [0.2.9] - 2026-11-18
 ### Fixed

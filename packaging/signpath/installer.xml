@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "installer" (paste into SignPath under the
+  Centsmith project with this exact slug).
+
+  Signs the NSIS installer Tauri bundles from the already-signed binaries. The
+  release workflow uploads a ZIP containing only Centsmith_<version>_x64-setup.exe
+  and passes the release version (x.y.z) as the "version" parameter. Tauri's
+  NSIS template sets ProductName=Centsmith and ProductVersion=<version>.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="Centsmith_${version}_x64-setup.exe" product-name="Centsmith" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

@@ -114,6 +114,21 @@ Requires Windows 10 or 11 (64-bit) and the WebView2 Runtime. WebView2 is preinst
 
 Your data lives in `%APPDATA%\Centsmith\centsmith.db`. Uninstalling leaves this folder in place; delete it manually to remove your data. If the app gets stuck on the loading screen, check Task Manager for a leftover `centsmith-backend.exe`, end it, and relaunch. Diagnostic logs are in `%APPDATA%\Centsmith\shell.log`.
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Windows releases are built from this repository by GitHub Actions ([`release.yml`](.github/workflows/release.yml)) and signed only after a maintainer approves each release in SignPath. The signed binaries are `centsmith.exe`, `centsmith-backend.exe` and the installer. Third-party open-source libraries bundled with the backend are included unmodified and are not signed with this certificate.
+
+Team roles:
+
+- Committers and reviewers: [@williamhatcher4](https://github.com/williamhatcher4)
+- Approvers: [@williamhatcher4](https://github.com/williamhatcher4)
+
+### Privacy policy
+
+Your financial data never leaves your computer. Centsmith makes one kind of network request on its own: it checks `centsmith.ca` for updates, and if you accept an update it downloads the new installer from there. These requests contain no personal or financial data, only what any web request carries, such as your IP address. On Windows 10, the installer can also download Microsoft's WebView2 Runtime from Microsoft if it isn't already installed. Centsmith transfers no other information to other networked systems unless you specifically ask it to.
+
 ## License
 
 Centsmith is free. The source code is released under the [MIT License](LICENSE).
