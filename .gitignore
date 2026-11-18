@@ -54,9 +54,7 @@ frontend/.env.*
 packaging/build/
 packaging/dist/
 packaging/*.patched.spec
-# PyArmor falls back to ./dist relative to CWD if its cfg hasn't been applied
-# yet (e.g. a stand-alone `pyarmor gen` run, or intermediate output before the
-# repacked spec settles). Always gitignored.
+# Stray build output some tools emit at the repo root rather than packaging/dist/.
 /dist/
 *.pfx
 *.p12
@@ -67,8 +65,6 @@ packaging/*.patched.spec
 # anywhere in the tree so it can't be checked in by accident.
 *.dpapi
 .tauri/
-.pyarmor/
-pyarmor.*.log
 
 # Tauri / Rust build output
 desktop/src-tauri/target/

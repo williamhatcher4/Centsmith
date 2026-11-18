@@ -3,7 +3,6 @@
 # Pipeline:
 #   1. npm run build                       -> frontend/dist
 #   2. pyinstaller packaging/backend.spec  -> packaging/dist/centsmith-backend/
-#      optional: -ObfuscateBackend routes this through PyArmor for release builds
 #   3. copy backend bundle into            -> desktop/src-tauri/resources/backend/
 #   4. cargo tauri build                   -> desktop/src-tauri/target/release/bundle/nsis/
 #
@@ -16,13 +15,12 @@
 #
 # Usage:
 #   ./packaging/build.ps1
-#   ./packaging/build.ps1 -SkipTauri -ObfuscateBackend
+#   ./packaging/build.ps1 -SkipTauri
 #   ./packaging/build.ps1 -Local          # skips updater signing for local testing
 
 [CmdletBinding()]
 param(
     [switch]$SkipTauri,
-    [switch]$ObfuscateBackend,
     [switch]$Local
 )
 
@@ -34,9 +32,7 @@ $Frontend = Join-Path $Root "frontend"
 $Packaging = Join-Path $Root "packaging"
 $Desktop = Join-Path $Root "desktop"
 $Python = Join-Path $Backend ".venv\Scripts\python.exe"
-$PyArmor = Join-Path $Backend ".venv\Scripts\pyarmor.exe"
 $BackendOut = Join-Path $Packaging "dist\centsmith-backend"
-$PyArmorDefaultBackendOut = Join-Path $Root "dist\centsmith-backend"
 $ResourceTarget = Join-Path $Desktop "src-tauri\resources\backend"
 
 function Step([string]$Message) {
@@ -66,11 +62,9 @@ try {
 Step "2/4  PyInstaller (backend sidecar)"
 # Force-remove stale dist output first — OneDrive marks some files read-only
 # which causes PyInstaller's own cleanup to fail with PermissionError.
-foreach ($OutputPath in @($BackendOut, $PyArmorDefaultBackendOut)) {
-    if (Test-Path $OutputPath) {
-        Get-ChildItem -Recurse $OutputPath | ForEach-Object { $_.Attributes = "Normal" }
-        Remove-Item -Recurse -Force $OutputPath
-    }
+if (Test-Path $BackendOut) {
+    Get-ChildItem -Recurse $BackendOut | ForEach-Object { $_.Attributes = "Normal" }
+    Remove-Item -Recurse -Force $BackendOut
 }
 & $Python -m pip show pyinstaller > $null 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -79,44 +73,15 @@ if ($LASTEXITCODE -ne 0) {
 }
 $BuildDir = Join-Path $Packaging "build"
 $DistDir = Join-Path $Packaging "dist"
-if ($ObfuscateBackend) {
-    & $Python -m pip show pyarmor > $null 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Installing PyArmor into backend venv..." -ForegroundColor Yellow
-        & $Python -m pip install "pyarmor>=9.0"
-    }
-
-    $PyiOptions = "--distpath `"$DistDir`" --workpath `"$BuildDir`" --noconfirm"
-    if (-not (Test-Path $PyArmor)) {
-        throw "PyArmor executable not found at $PyArmor"
-    }
-
-    # PyArmor's `cfg` parses three positional tokens after the subcommand:
-    # <key> <op> <value>. PowerShell tokenizes the bare `=` as its own arg,
-    # which matches that grammar — do NOT collapse to "key=value".
-    & $PyArmor cfg pack:pyi_options = $PyiOptions
-    if ($LASTEXITCODE -ne 0) { throw "PyArmor config failed" }
-
-    & $PyArmor gen --pack (Join-Path $Packaging "backend.spec") `
-        -r (Join-Path $Packaging "backend_entry.py") (Join-Path $Backend "app")
-    if ($LASTEXITCODE -ne 0) { throw "PyArmor/PyInstaller build failed" }
-} else {
-    & $Python -m PyInstaller (Join-Path $Packaging "backend.spec") `
-        --distpath $DistDir --workpath $BuildDir --noconfirm
-    if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
-}
+& $Python -m PyInstaller (Join-Path $Packaging "backend.spec") `
+    --distpath $DistDir --workpath $BuildDir --noconfirm
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
 
 Step "3/4  Stage backend bundle into Tauri resources/"
-$BackendOutCandidates = @($BackendOut)
-if ($ObfuscateBackend) {
-    # PyArmor's pack mode may invoke PyInstaller without honoring pack:pyi_options
-    # on some CI versions, leaving the bundle in PyInstaller's default root dist/.
-    $BackendOutCandidates += $PyArmorDefaultBackendOut
+if (-not (Test-Path $BackendOut)) {
+    throw "Backend bundle output not found at $BackendOut"
 }
-$ActualBackendOut = $BackendOutCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $ActualBackendOut) {
-    throw "Backend bundle output not found. Checked: $($BackendOutCandidates -join ', ')"
-}
+$ActualBackendOut = $BackendOut
 if (Test-Path $ResourceTarget) { Remove-Item -Recurse -Force $ResourceTarget }
 New-Item -ItemType Directory -Force -Path $ResourceTarget | Out-Null
 Write-Host "Staging backend bundle from $ActualBackendOut" -ForegroundColor DarkGray

@@ -10,6 +10,14 @@ matching section fails the release workflow on purpose, so every release ships w
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-11-18
+### Fixed
+- Centsmith now starts on Windows PCs with Smart App Control (or other
+  Application Control policies) enabled. Earlier releases bundled an obfuscated
+  backend whose runtime was blocked by Windows, so the app failed to start with
+  a "Centsmith could not start" message. The backend now ships unobfuscated —
+  fitting for an open-source, MIT-licensed app — and launches normally.
+
 ## [0.2.8] - 2026-11-17
 ### Changed
 - Centsmith is now free. Automatic updates no longer need a license key, and the
